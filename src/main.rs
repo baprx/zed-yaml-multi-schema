@@ -202,6 +202,7 @@ fn send(
     error: Option<Value>,
 ) -> io::Result<()> {
     let mut body = json!({});
+    body["jsonrpc"] = json!("2.0");
     if let Some(id) = id {
         body["id"] = id;
     }
