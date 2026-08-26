@@ -1,0 +1,33 @@
+---
+# $schema=./schemas/test.schema.json
+test:
+  enabled: true
+  elements:
+    - 1
+    - A
+  product: anch
+  version: 1
+
+# $schema=https://raw.githubusercontent.com/traefik/traefik-helm-chart/refs/heads/master/traefik/values.schema.json
+traefik:
+  enabled: true
+  image:
+    registry: example.com
+    repository: traefik
+    tag: 1.1.1
+
+# $schema=https://example.com/helm-charts/schemas/argocd-apps/latest/values.schema.json
+argocd-apps:
+  clusters:
+    cluster-name:
+      subkey-schema: now-working
+
+kubernetes:
+  apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: my-config
+    namespace: default
+  data:
+    config.yaml: |
+      key: value

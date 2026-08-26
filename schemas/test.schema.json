@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "description": "Whether test is enabled"
+    },
+    "elements": {
+      "type": "array",
+      "description": "List of test elements",
+      "items": {
+        "type": ["string", "number"]
+      }
+    },
+    "product": {
+      "type": "string",
+      "description": "Product name"
+    },
+    "version": {
+      "type": "number",
+      "description": "Version number"
+    }
+  },
+  "required": ["enabled", "elements", "product", "version"]
+}
