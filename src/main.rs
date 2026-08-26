@@ -78,6 +78,11 @@ fn main() -> io::Result<()> {
     let mut server = YamlServer::new(&fetcher, &root);
     let mut documents: HashMap<String, String> = HashMap::new();
 
+    eprintln!(
+        "zed-yaml-multi-schema-lsp: started (worktree root: {})",
+        root.display()
+    );
+
     while let Some(raw) = read_message(&mut reader)? {
         let msg: Value = match serde_json::from_str(&raw) {
             Ok(v) => v,
@@ -89,6 +94,7 @@ fn main() -> io::Result<()> {
 
         match method {
             Some("initialize") => {
+                eprintln!("zed-yaml-multi-schema-lsp: initialize");
                 let resp = json!({
                     "capabilities": {
                         "textDocumentSync": 2,
@@ -110,6 +116,13 @@ fn main() -> io::Result<()> {
                 if let Some(text) = text {
                     documents.insert(uri.to_string(), text.to_string());
                     server.on_change(text);
+                    eprintln!(
+                        "zed-yaml-multi-schema-lsp: {} {} ({}) -> {} diagnostic(s)",
+                        method.unwrap_or("?"),
+                        uri,
+                        text.lines().count(),
+                        server.diagnostics().len()
+                    );
                     publish_diagnostics(&mut out, uri, &server)?;
                 }
             }
@@ -123,6 +136,12 @@ fn main() -> io::Result<()> {
                     .and_then(|l| l.as_u64())
                     .unwrap_or(0) as usize;
                 let completions = server.complete_at_line(line);
+                eprintln!(
+                    "zed-yaml-multi-schema-lsp: completion at line {} of {} -> {} item(s)",
+                    line,
+                    uri,
+                    completions.len()
+                );
                 let items: Vec<Value> = completions
                     .into_iter()
                     .map(|c| json!({"label": c.label, "kind": c.kind, "detail": c.detail}))

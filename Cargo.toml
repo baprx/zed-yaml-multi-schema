@@ -1,6 +1,6 @@
 [package]
 name = "zed-yaml-multi-schema"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Zed extension for per-block JSON Schema validation of YAML (Helm umbrella mode)"
 license = "MIT"
@@ -12,13 +12,17 @@ crate-type = ["cdylib", "rlib"]
 [[bin]]
 name = "zed-yaml-multi-schema-lsp"
 path = "src/main.rs"
+required-features = ["lsp-bin"]
+
+[features]
+lsp-bin = []
 
 [dependencies]
 zed_extension_api = "0.7.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
-jsonschema = "0.28"
+jsonschema = { version = "0.28", default-features = false }
 url = "2"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

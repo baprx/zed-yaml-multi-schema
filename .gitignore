@@ -4,6 +4,7 @@ Cargo.lock.orig
 *.rs.bk
 *.rlib
 *.profraw
+*.wasm
 
 # Editor / OS
 .DS_Store

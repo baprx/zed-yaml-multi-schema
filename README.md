@@ -29,7 +29,7 @@ once published.
    target automatically).
 2. Build the bundled language-server binary and place it on your `PATH`:
    ```bash
-   cargo build --release
+   cargo build --release --features lsp-bin
    cp target/release/zed-yaml-multi-schema-lsp ~/.local/bin/
    ```
    (`language_server_command` looks up `zed-yaml-multi-schema-lsp` on the `PATH`.)
