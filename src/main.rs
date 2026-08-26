@@ -100,7 +100,7 @@ fn main() -> io::Result<()> {
                         "textDocumentSync": 1,
                         "completionProvider": {"resolveProvider": false}
                     },
-                    "serverInfo": {"name": "zed-yaml-multi-schema", "version": "0.2.0"}
+                    "serverInfo": {"name": "zed-yaml-multi-schema", "version": "0.2.1"}
                 });
                 send(&mut out, id, Some(resp), None)?;
             }
@@ -123,7 +123,7 @@ fn main() -> io::Result<()> {
                         text.lines().count(),
                         server.diagnostics().len()
                     );
-                    publish_diagnostics(&mut out, uri, &server)?;
+                    publish_diagnostics(&mut out, uri, &server, &text)?;
                 }
             }
             Some("textDocument/completion") => {
@@ -188,7 +188,14 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
-fn publish_diagnostics(out: &mut impl Write, uri: &str, server: &YamlServer) -> io::Result<()> {
+fn publish_diagnostics(
+    out: &mut impl Write,
+    uri: &str,
+    server: &YamlServer,
+    text: &str,
+) -> io::Result<()> {
+    let lines: Vec<&str> = text.lines().collect();
+    let line_len = |line: usize| lines.get(line).map(|l| l.chars().count()).unwrap_or(0);
     let diags: Vec<Value> = server
         .diagnostics()
         .iter()
@@ -196,7 +203,7 @@ fn publish_diagnostics(out: &mut impl Write, uri: &str, server: &YamlServer) -> 
             json!({
                 "range": {
                     "start": {"line": d.start_line, "character": 0},
-                    "end": {"line": d.end_line, "character": 0}
+                    "end": {"line": d.end_line, "character": line_len(d.end_line)}
                 },
                 "severity": lsp_severity(&d.severity),
                 "message": d.message,

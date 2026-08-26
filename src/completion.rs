@@ -107,9 +107,9 @@ fn values(schema: &Value, child_indent: usize) -> Vec<CompletionItem> {
 }
 
 /// Builds a snippet that seeds an object's structure: each property on its own
-/// line at `child_indent`, with `$1..$n` tab stops for values and a final `$0`.
-/// Required properties come first (falling back to all properties when the
-/// schema declares none required).
+/// line at `child_indent`, with `$1..$n` tab stops for values. The cursor lands
+/// on the final property's value (no trailing blank line). Required properties
+/// come first (falling back to all properties when the schema declares none).
 fn object_snippet(schema: &Value, child_indent: usize) -> CompletionItem {
     let props = schema
         .get("properties")
@@ -137,7 +137,6 @@ fn object_snippet(schema: &Value, child_indent: usize) -> CompletionItem {
     for (i, key) in order.iter().enumerate() {
         snippet.push_str(&format!("\n{pad}{key}: ${{{}}}", i + 1));
     }
-    snippet.push_str(&format!("\n{pad}$0"));
 
     let label = if order.len() == 1 {
         order[0].clone()
@@ -260,6 +259,9 @@ mod tests {
         assert!(snip.contains("tag: ${2}"));
         // The snippet starts with a newline and uses the child indent.
         assert!(snip.starts_with("\n  "));
+        // No trailing blank line is emitted after the last property.
+        assert!(!snip.ends_with("$0"));
+        assert!(!snip.ends_with("\n  "));
     }
 
     #[test]

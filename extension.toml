@@ -1,6 +1,6 @@
 id = "zed-yaml-multi-schema"
 name = "Zed YAML Multi-Schema"
-version = "0.2.0"
+version = "0.2.1"
 schema_version = 1
 authors = ["Zed YAML Multi-Schema contributors"]
 description = "Per-block JSON Schema validation and completion for YAML files (Helm umbrella mode)."
