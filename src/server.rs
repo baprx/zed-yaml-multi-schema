@@ -25,7 +25,7 @@ pub struct Diagnostic {
 #[derive(Debug, Clone)]
 pub struct Completion {
     pub label: String,
-    pub kind: String,
+    pub kind: i32,
     pub detail: Option<String>,
 }
 

@@ -6,7 +6,8 @@ use serde_json::Value;
 #[derive(Debug, Clone)]
 pub struct CompletionItem {
     pub label: String,
-    pub kind: String,
+    /// LSP `CompletionItemKind` (integer enum), e.g. 10 = Property.
+    pub kind: i32,
     pub detail: Option<String>,
 }
 
@@ -32,11 +33,21 @@ pub fn complete(schema: &Value, _depth: usize) -> Vec<CompletionItem> {
     items
 }
 
-fn prop_type(prop: &Value) -> String {
-    prop.get("type")
+fn prop_type(prop: &Value) -> i32 {
+    let t = prop
+        .get("type")
         .and_then(|t| t.as_str())
-        .map(String::from)
-        .unwrap_or_else(|| "property".to_string())
+        .unwrap_or("property");
+    match t {
+        "object" => 9,   // Module
+        "array" => 11,   // Unit
+        "boolean" => 21, // Constant
+        "number" => 12,  // Value
+        "integer" => 12, // Value
+        "null" => 21,    // Constant
+        "string" => 10,  // Property
+        _ => 10,         // Property
+    }
 }
 
 #[cfg(test)]

@@ -191,7 +191,14 @@ fn publish_diagnostics(out: &mut impl Write, uri: &str, server: &YamlServer) -> 
         })
         .collect();
     let params = json!({"uri": uri, "diagnostics": diags});
-    send(out, None, Some(params), None)?;
+    send_notification(out, "textDocument/publishDiagnostics", params)?;
+    Ok(())
+}
+
+fn send_notification(out: &mut impl Write, method: &str, params: Value) -> io::Result<()> {
+    let body = json!({"jsonrpc": "2.0", "method": method, "params": params});
+    let payload = serde_json::to_string(&body)?;
+    write!(out, "Content-Length: {}\r\n\r\n{}", payload.len(), payload)?;
     Ok(())
 }
 
