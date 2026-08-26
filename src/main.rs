@@ -97,7 +97,7 @@ fn main() -> io::Result<()> {
                 eprintln!("zed-yaml-multi-schema-lsp: initialize");
                 let resp = json!({
                     "capabilities": {
-                        "textDocumentSync": 2,
+                        "textDocumentSync": 1,
                         "completionProvider": {"resolveProvider": false}
                     },
                     "serverInfo": {"name": "zed-yaml-multi-schema", "version": "0.1.0"}
@@ -110,12 +110,12 @@ fn main() -> io::Result<()> {
                     .pointer("/textDocument/uri")
                     .and_then(|u| u.as_str())
                     .unwrap_or_default();
-                let text = params
-                    .pointer("/textDocument/text")
-                    .and_then(|t| t.as_str());
+                // `didOpen` carries the text in `/textDocument/text`; `didChange`
+                // (full sync) carries it in `/contentChanges/0/text`.
+                let text = document_text(&params);
                 if let Some(text) = text {
-                    documents.insert(uri.to_string(), text.to_string());
-                    server.on_change(text);
+                    documents.insert(uri.to_string(), text.clone());
+                    server.on_change(&text);
                     eprintln!(
                         "zed-yaml-multi-schema-lsp: {} {} ({}) -> {} diagnostic(s)",
                         method.unwrap_or("?"),
@@ -202,6 +202,22 @@ fn send_notification(out: &mut impl Write, method: &str, params: Value) -> io::R
     Ok(())
 }
 
+/// Extracts the full document text from a `didOpen` or `didChange` (full sync)
+/// request: `didOpen` uses `/textDocument/text`, `didChange` uses
+/// `/contentChanges/0/text`.
+fn document_text(params: &Value) -> Option<String> {
+    params
+        .pointer("/textDocument/text")
+        .and_then(|t| t.as_str())
+        .map(String::from)
+        .or_else(|| {
+            params
+                .pointer("/contentChanges/0/text")
+                .and_then(|t| t.as_str())
+                .map(String::from)
+        })
+}
+
 fn send(
     out: &mut impl Write,
     id: Option<Value>,
@@ -226,4 +242,32 @@ fn send(
     let payload = serde_json::to_string(&body)?;
     write!(out, "Content-Length: {}\r\n\r\n{}", payload.len(), payload)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn document_text_from_did_open() {
+        let params = json!({
+            "textDocument": {"uri": "file:///a.yaml", "text": "a: 1\n"}
+        });
+        assert_eq!(document_text(&params).as_deref(), Some("a: 1\n"));
+    }
+
+    #[test]
+    fn document_text_from_did_change_full_sync() {
+        let params = json!({
+            "textDocument": {"uri": "file:///a.yaml"},
+            "contentChanges": [{"text": "a: 2\n"}]
+        });
+        assert_eq!(document_text(&params).as_deref(), Some("a: 2\n"));
+    }
+
+    #[test]
+    fn document_text_absent_when_no_text() {
+        let params = json!({"textDocument": {"uri": "file:///a.yaml"}});
+        assert_eq!(document_text(&params), None);
+    }
 }
