@@ -19,17 +19,20 @@ pub struct CompletionItem {
 /// Returns completions for `schema` at the given `path`, depending on whether
 /// the cursor is choosing a key or a value. `child_indent` is the indentation
 /// (number of leading spaces) to use for lines inserted by a structure snippet.
+/// `existing_keys` holds the property names already present at the cursor's map,
+/// so key completions avoid suggesting duplicates.
 pub fn complete(
     schema: &Value,
     path: &[String],
     position: CursorPosition,
     child_indent: usize,
+    existing_keys: &[String],
 ) -> Vec<CompletionItem> {
     let Some(node) = schema_at(schema, path) else {
         return Vec::new();
     };
     match position {
-        CursorPosition::Key => keys(node),
+        CursorPosition::Key => keys(node, existing_keys),
         CursorPosition::Value => values(node, child_indent),
     }
 }
@@ -43,13 +46,17 @@ fn schema_at<'a>(schema: &'a Value, path: &[String]) -> Option<&'a Value> {
     Some(node)
 }
 
-/// Property-name completions for an object schema.
-fn keys(schema: &Value) -> Vec<CompletionItem> {
+/// Property-name completions for an object schema, excluding names already
+/// present in the map (`existing_keys`) to avoid duplicate keys.
+fn keys(schema: &Value, existing_keys: &[String]) -> Vec<CompletionItem> {
     let mut items = Vec::new();
     let Some(props) = schema.get("properties").and_then(|p| p.as_object()) else {
         return items;
     };
     for (name, prop) in props {
+        if existing_keys.iter().any(|k| k == name) {
+            continue;
+        }
         items.push(CompletionItem {
             label: name.clone(),
             kind: prop_kind(prop),
@@ -214,10 +221,21 @@ mod tests {
 
     #[test]
     fn key_position_lists_properties() {
-        let items = complete(&schema(), &[], CursorPosition::Key, 0);
+        let items = complete(&schema(), &[], CursorPosition::Key, 0, &[]);
         let labels: Vec<String> = items.iter().map(|i| i.label.clone()).collect();
         assert!(labels.contains(&"enabled".to_string()));
         assert!(labels.contains(&"version".to_string()));
+    }
+
+    #[test]
+    fn key_position_excludes_already_present_keys() {
+        // `enabled` is already present, so it must not be suggested again.
+        let existing = vec!["enabled".to_string()];
+        let items = complete(&schema(), &[], CursorPosition::Key, 0, &existing);
+        let labels: Vec<String> = items.iter().map(|i| i.label.clone()).collect();
+        assert!(!labels.contains(&"enabled".to_string()));
+        assert!(labels.contains(&"version".to_string()));
+        assert!(labels.contains(&"image".to_string()));
     }
 
     #[test]
@@ -227,6 +245,7 @@ mod tests {
             &["enabled".to_string()],
             CursorPosition::Value,
             0,
+            &[],
         );
         let labels: Vec<String> = items.iter().map(|i| i.label.clone()).collect();
         assert_eq!(labels, vec!["true".to_string(), "false".to_string()]);
@@ -234,7 +253,13 @@ mod tests {
 
     #[test]
     fn value_position_suggests_enum() {
-        let items = complete(&schema(), &["mode".to_string()], CursorPosition::Value, 0);
+        let items = complete(
+            &schema(),
+            &["mode".to_string()],
+            CursorPosition::Value,
+            0,
+            &[],
+        );
         let labels: Vec<String> = items.iter().map(|i| i.label.clone()).collect();
         assert_eq!(
             labels,
@@ -244,7 +269,13 @@ mod tests {
 
     #[test]
     fn value_position_suggests_const() {
-        let items = complete(&schema(), &["strict".to_string()], CursorPosition::Value, 0);
+        let items = complete(
+            &schema(),
+            &["strict".to_string()],
+            CursorPosition::Value,
+            0,
+            &[],
+        );
         assert_eq!(items[0].label, "true");
     }
 
@@ -252,7 +283,13 @@ mod tests {
     fn value_position_suggests_nested_object_snippet() {
         // `image` is an object without `required`: the snippet seeds all its
         // properties, each on an indented line with tab-stop placeholders.
-        let items = complete(&schema(), &["image".to_string()], CursorPosition::Value, 2);
+        let items = complete(
+            &schema(),
+            &["image".to_string()],
+            CursorPosition::Value,
+            2,
+            &[],
+        );
         assert_eq!(items.len(), 1);
         let snip = items[0].insert_text.as_deref().expect("snippet");
         assert!(snip.contains("registry: ${1}"));
@@ -271,7 +308,7 @@ mod tests {
             "properties": {"tag": {"type": "string"}, "repository": {"type": "string"}},
             "required": ["repository"]
         });
-        let items = complete(&s, &[], CursorPosition::Value, 2);
+        let items = complete(&s, &[], CursorPosition::Value, 2, &[]);
         let snip = items[0].insert_text.as_deref().unwrap();
         // Required property is seeded before the optional one.
         assert!(snip.find("repository: ${1}").unwrap() < snip.find("tag: ${2}").unwrap());
@@ -279,7 +316,13 @@ mod tests {
 
     #[test]
     fn value_position_suggests_array() {
-        let items = complete(&schema(), &["labels".to_string()], CursorPosition::Value, 0);
+        let items = complete(
+            &schema(),
+            &["labels".to_string()],
+            CursorPosition::Value,
+            0,
+            &[],
+        );
         assert_eq!(items[0].label, "[]");
     }
 
@@ -290,6 +333,7 @@ mod tests {
             &["version".to_string()],
             CursorPosition::Value,
             0,
+            &[],
         );
         assert_eq!(items[0].label, "0");
     }

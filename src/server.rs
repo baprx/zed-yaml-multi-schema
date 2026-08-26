@@ -144,7 +144,8 @@ impl<'a> YamlServer<'a> {
             .get(line)
             .map(|l| l.len() - l.trim_start().len())
             .unwrap_or(0);
-        completion::complete(&schema, &path, position, cursor_indent + 2)
+        let existing_keys = existing_keys(&block.value, &path);
+        completion::complete(&schema, &path, position, cursor_indent + 2, &existing_keys)
             .into_iter()
             .map(|i| Completion {
                 label: i.label,
@@ -153,6 +154,29 @@ impl<'a> YamlServer<'a> {
                 insert_text: i.insert_text,
             })
             .collect()
+    }
+}
+
+/// Collects the property names already present in the mapping at `path`
+/// (relative to a block's value), so key completions can avoid duplicates.
+fn existing_keys(value: &serde_yaml::Value, path: &[String]) -> Vec<String> {
+    use serde_yaml::Value;
+    let mut node = value;
+    for key in path {
+        match node {
+            Value::Mapping(map) => match map.get(Value::String(key.clone())) {
+                Some(next) => node = next,
+                None => return Vec::new(),
+            },
+            _ => return Vec::new(),
+        }
+    }
+    match node {
+        Value::Mapping(map) => map
+            .keys()
+            .filter_map(|k| k.as_str().map(String::from))
+            .collect(),
+        _ => Vec::new(),
     }
 }
 
@@ -238,15 +262,35 @@ mod tests {
     fn completion_only_in_governed_block() {
         let fetcher = fetcher_with_schema();
         let mut server = YamlServer::new(&fetcher, Path::new("/root"));
-        let text =
-            "# $schema=./schemas/test.schema.json\ntest:\n  enabled: true\n\nother:\n  x: 1\n";
+        let text = "# $schema=./schemas/test.schema.json\ntest:\n  enabled: \n\nother:\n  x: 1\n";
         server.on_change(text);
-        // Cursor at key position inside `test` block yields completions.
-        let in_block = server.complete_at(text, 2, 4);
-        assert!(in_block.iter().any(|c| c.label == "enabled"));
+        // Cursor after `enabled:` (value position) inside `test` yields completions.
+        let in_block = server.complete_at(text, 2, 12);
+        assert!(!in_block.is_empty());
         // Cursor inside unannotated `other` block yields none.
         let other = server.complete_at(text, 5, 4);
         assert!(other.is_empty());
+    }
+
+    #[test]
+    fn completion_excludes_keys_already_in_map() {
+        let mut local = HashMap::new();
+        local.insert(
+            "/root/schemas/test.schema.json".to_string(),
+            r#"{"type":"object","properties":{"enabled":{"type":"boolean"},"version":{"type":"number"}}}"#
+                .to_string(),
+        );
+        let fetcher = FakeFetcher { local };
+        let mut server = YamlServer::new(&fetcher, Path::new("/root"));
+        // `enabled` is already present in the `test` map, so it must not be
+        // suggested; `version` is absent and still offered. The trailing `extra`
+        // key keeps the cursor line inside the block (blank lines are trimmed).
+        let text = "# $schema=./schemas/test.schema.json\ntest:\n  enabled: true\n  \n  extra: x\n";
+        server.on_change(text);
+        let items = server.complete_at(text, 3, 4);
+        let labels: Vec<String> = items.iter().map(|c| c.label.clone()).collect();
+        assert!(!labels.contains(&"enabled".to_string()));
+        assert!(labels.contains(&"version".to_string()));
     }
 
     #[test]

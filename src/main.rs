@@ -100,7 +100,7 @@ fn main() -> io::Result<()> {
                         "textDocumentSync": 1,
                         "completionProvider": {"resolveProvider": false}
                     },
-                    "serverInfo": {"name": "zed-yaml-multi-schema", "version": "0.2.1"}
+                    "serverInfo": {"name": "zed-yaml-multi-schema", "version": "0.2.2"}
                 });
                 send(&mut out, id, Some(resp), None)?;
             }
