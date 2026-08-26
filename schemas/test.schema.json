@@ -20,6 +20,27 @@
     "version": {
       "type": "number",
       "description": "Version number"
+    },
+    "image": {
+      "type": "object",
+      "description": "Kubernetes container image configuration",
+      "properties": {
+        "repository": {
+          "type": "string",
+          "description": "The image repository to pull from (e.g., nginx)"
+        },
+        "tag": {
+          "type": "string",
+          "description": "The image tag to pull (e.g., latest or 1.21.6)"
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"],
+          "description": "The image pull policy"
+        }
+      },
+      "required": ["repository"],
+      "additionalProperties": false
     }
   },
   "required": ["enabled", "elements", "product", "version"]

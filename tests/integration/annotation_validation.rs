@@ -26,9 +26,10 @@ fn annotated_block_validates_against_local_schema() {
     );
     let diags = server.diagnostics();
     assert!(!diags.is_empty());
-    // All diagnostics land within the `test` block (start_line == 1).
+    // The `enabled` violation is flagged on its own line (2), not the block.
     for d in diags {
-        assert_eq!(d.start_line, 1);
+        assert_eq!(d.start_line, 2);
+        assert_eq!(d.end_line, 2);
     }
 }
 

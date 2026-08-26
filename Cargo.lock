@@ -1471,7 +1471,7 @@ dependencies = [
 
 [[package]]
 name = "zed-yaml-multi-schema"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "jsonschema",
  "serde",

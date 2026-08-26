@@ -100,7 +100,7 @@ fn main() -> io::Result<()> {
                         "textDocumentSync": 1,
                         "completionProvider": {"resolveProvider": false}
                     },
-                    "serverInfo": {"name": "zed-yaml-multi-schema", "version": "0.1.0"}
+                    "serverInfo": {"name": "zed-yaml-multi-schema", "version": "0.2.0"}
                 });
                 send(&mut out, id, Some(resp), None)?;
             }
@@ -135,16 +135,30 @@ fn main() -> io::Result<()> {
                     .pointer("/position/line")
                     .and_then(|l| l.as_u64())
                     .unwrap_or(0) as usize;
-                let completions = server.complete_at_line(line);
+                let character = params
+                    .pointer("/position/character")
+                    .and_then(|c| c.as_u64())
+                    .unwrap_or(0) as usize;
+                let text = documents.get(uri).cloned().unwrap_or_default();
+                let completions = server.complete_at(&text, line, character);
                 eprintln!(
-                    "zed-yaml-multi-schema-lsp: completion at line {} of {} -> {} item(s)",
+                    "zed-yaml-multi-schema-lsp: completion at {}:{} of {} -> {} item(s)",
                     line,
+                    character,
                     uri,
                     completions.len()
                 );
                 let items: Vec<Value> = completions
                     .into_iter()
-                    .map(|c| json!({"label": c.label, "kind": c.kind, "detail": c.detail}))
+                    .map(|c| {
+                        let mut item =
+                            json!({"label": c.label, "kind": c.kind, "detail": c.detail});
+                        if let Some(snippet) = c.insert_text {
+                            item["insertText"] = json!(snippet);
+                            item["insertTextFormat"] = json!(2); // Snippet
+                        }
+                        item
+                    })
                     .collect();
                 send(
                     &mut out,
@@ -184,7 +198,7 @@ fn publish_diagnostics(out: &mut impl Write, uri: &str, server: &YamlServer) -> 
                     "start": {"line": d.start_line, "character": 0},
                     "end": {"line": d.end_line, "character": 0}
                 },
-                "severity": 1,
+                "severity": lsp_severity(&d.severity),
                 "message": d.message,
                 "source": "zed-yaml-multi-schema"
             })
@@ -193,6 +207,17 @@ fn publish_diagnostics(out: &mut impl Write, uri: &str, server: &YamlServer) -> 
     let params = json!({"uri": uri, "diagnostics": diags});
     send_notification(out, "textDocument/publishDiagnostics", params)?;
     Ok(())
+}
+
+/// Maps our string severity to the LSP DiagnosticSeverity integer:
+/// Error=1, Warning=2, Information=3, Hint=4.
+fn lsp_severity(severity: &str) -> i64 {
+    match severity {
+        "warning" => 2,
+        "info" => 3,
+        "hint" => 4,
+        _ => 1,
+    }
 }
 
 fn send_notification(out: &mut impl Write, method: &str, params: Value) -> io::Result<()> {

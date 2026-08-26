@@ -155,6 +155,184 @@ impl Document {
     }
 }
 
+/// Whether the cursor is at a key position (choosing a property name) or a
+/// value position (choosing a value after `key:`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CursorPosition {
+    Key,
+    Value,
+}
+
+/// Computes the completion context at the cursor within a block:
+/// the enclosing mapping-key path (ancestors above `cursor_line`, excluding the
+/// top-level block key at `start_line`) and whether the cursor is at a key or
+/// value position.
+pub fn context(
+    lines: &[&str],
+    start_line: usize,
+    cursor_line: usize,
+    cursor_col: usize,
+) -> (Vec<String>, CursorPosition) {
+    let cur = lines.get(cursor_line).copied().unwrap_or("");
+    let cursor_indent = cur.len() - cur.trim_start().len();
+
+    let mut stack: Vec<(usize, String)> = Vec::new();
+    for line in lines.iter().take(cursor_line).skip(start_line + 1) {
+        push_mapping_key(line, &mut stack);
+    }
+    // Keys at the cursor's own indentation (or deeper) are siblings or
+    // descendants of the cursor, not ancestors; drop them so the enclosing path
+    // reflects the map the cursor actually belongs to.
+    while let Some(&(si, _)) = stack.last() {
+        if si >= cursor_indent {
+            stack.pop();
+        } else {
+            break;
+        }
+    }
+    let enclosing: Vec<String> = stack.into_iter().map(|(_, k)| k).collect();
+
+    let trimmed = cur.trim();
+    if !trimmed.is_empty() && !trimmed.starts_with('#') {
+        if let Some((key, _)) = trimmed.split_once(':') {
+            let key = key.trim().trim_matches(['"', '\'']);
+            if !key.is_empty() {
+                let colon = cur.find(':').unwrap_or(0);
+                if colon < cursor_col {
+                    let mut path = enclosing.clone();
+                    path.push(key.to_string());
+                    return (path, CursorPosition::Value);
+                }
+            }
+        }
+    }
+    (enclosing, CursorPosition::Key)
+}
+
+fn indent_of(line: &str) -> usize {
+    line.len() - line.trim_start().len()
+}
+
+/// Maps a JSON-pointer-style path (relative to a block value) to the 0-based
+/// line of the offending key or array element within the block's source.
+///
+/// `path` is the split pointer (e.g. `/elements/2` -> `["elements", "2"]`).
+/// Mapping keys are located at their indentation level; numeric segments count
+/// `- ` list items. Returns the block's start line when the path is empty or
+/// cannot be resolved (best-effort).
+pub fn line_for_path(lines: &[&str], block_start_line: usize, path: &[String]) -> usize {
+    let mut container_indent = indent_of(lines[block_start_line]) + 2;
+    let mut cursor = block_start_line;
+    for seg in path {
+        let from = cursor + 1;
+        let line = match seg.parse::<usize>() {
+            Ok(idx) => item_line(lines, from, container_indent, idx),
+            Err(_) => key_line(lines, from, container_indent, seg),
+        };
+        match line {
+            Some(l) => {
+                cursor = l;
+                container_indent += 2;
+            }
+            None => return block_start_line,
+        }
+    }
+    cursor
+}
+
+/// Finds the line at or after `from` where the mapping key `key` appears at
+/// exactly `container_indent`. Stops (returns None) once a shallower-indented
+/// line is reached, meaning we left the containing mapping.
+fn key_line(lines: &[&str], from: usize, container_indent: usize, key: &str) -> Option<usize> {
+    for (i, line) in lines.iter().enumerate().skip(from) {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        let indent = indent_of(line);
+        if indent < container_indent {
+            return None;
+        }
+        if indent == container_indent {
+            if let Some((k, _)) = trimmed.split_once(':') {
+                if k.trim().trim_matches(['"', '\'']) == key {
+                    return Some(i);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Finds the line of the `index`-th `- ` list item at `container_indent`,
+/// scanning from `from` onward and stopping once a shallower line is reached.
+fn item_line(lines: &[&str], from: usize, container_indent: usize, index: usize) -> Option<usize> {
+    let mut seen = 0usize;
+    for (i, line) in lines.iter().enumerate().skip(from) {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        let indent = indent_of(line);
+        if indent < container_indent {
+            return None;
+        }
+        if indent == container_indent && trimmed.starts_with("- ") {
+            if seen == index {
+                return Some(i);
+            }
+            seen += 1;
+        }
+    }
+    None
+}
+
+/// Pushes a mapping key from `line` onto the indent-based path stack, popping
+/// siblings nested no deeper than this line.
+fn push_mapping_key(line: &str, stack: &mut Vec<(usize, String)>) {
+    let indent = line.len() - line.trim_start().len();
+    let trimmed = line.trim();
+    if trimmed.is_empty()
+        || trimmed.starts_with('#')
+        || trimmed.starts_with("---")
+        || trimmed.starts_with("...")
+    {
+        return;
+    }
+    if let Some(rest) = trimmed.strip_prefix("- ") {
+        if let Some((key, _)) = rest.split_once(':') {
+            let key = key.trim().trim_matches(['"', '\'']);
+            if key.is_empty() {
+                return;
+            }
+            let eff = indent + 2;
+            while let Some(&(si, _)) = stack.last() {
+                if si >= eff {
+                    stack.pop();
+                } else {
+                    break;
+                }
+            }
+            stack.push((eff, key.to_string()));
+        }
+        return;
+    }
+    if let Some((key, _)) = trimmed.split_once(':') {
+        let key = key.trim().trim_matches(['"', '\'']);
+        if key.is_empty() {
+            return;
+        }
+        while let Some(&(si, _)) = stack.last() {
+            if si >= indent {
+                stack.pop();
+            } else {
+                break;
+            }
+        }
+        stack.push((indent, key.to_string()));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -188,5 +366,88 @@ mod tests {
         let doc = Document::parse(text).unwrap();
         assert_eq!(doc.blocks.len(), 1);
         assert!(doc.blocks[0].schema_ref.is_none());
+    }
+
+    #[test]
+    fn context_value_position_at_nested_key() {
+        let text = "traefik:\n  image:\n    registry: ex\n";
+        let lines: Vec<&str> = text.lines().collect();
+        // Cursor after `registry:` on line 2.
+        let (path, pos) = context(&lines, 0, 2, 17);
+        assert_eq!(path, vec!["image".to_string(), "registry".to_string()]);
+        assert_eq!(pos, CursorPosition::Value);
+    }
+
+    #[test]
+    fn context_key_position_lists_enclosing_keys() {
+        let text = "traefik:\n  image:\n    \n";
+        let lines: Vec<&str> = text.lines().collect();
+        // Empty line 2 under `image:` at key position.
+        let (path, pos) = context(&lines, 0, 2, 4);
+        assert_eq!(path, vec!["image".to_string()]);
+        assert_eq!(pos, CursorPosition::Key);
+    }
+
+    #[test]
+    fn context_key_position_editing_existing_key() {
+        let text = "traefik:\n  image\n";
+        let lines: Vec<&str> = text.lines().collect();
+        // Cursor on `image` (no colon yet) at key position.
+        let (path, pos) = context(&lines, 0, 1, 6);
+        assert_eq!(path, Vec::<String>::new());
+        assert_eq!(pos, CursorPosition::Key);
+    }
+
+    #[test]
+    fn context_cursor_after_sibling_key_belongs_to_parent_map() {
+        // Cursor on an empty line under `image:` but after a sibling `pullPolicy`
+        // must still resolve to the `image` map, not `pullPolicy`.
+        let text = "test:\n  image:\n    pullPolicy: Always\n    \n";
+        let lines: Vec<&str> = text.lines().collect();
+        let (path, pos) = context(&lines, 0, 3, 4);
+        assert_eq!(path, vec!["image".to_string()]);
+        assert_eq!(pos, CursorPosition::Key);
+    }
+
+    #[test]
+    fn context_cursor_deeper_than_sibling_nests_inside_object() {
+        let text = "test:\n  image:\n    pullPolicy: Always\n      \n";
+        let lines: Vec<&str> = text.lines().collect();
+        // Cursor at indent 6 (deeper than pullPolicy) nests inside pullPolicy.
+        let (path, _) = context(&lines, 0, 3, 6);
+        assert_eq!(path, vec!["image".to_string(), "pullPolicy".to_string()]);
+    }
+
+    #[test]
+    fn line_for_path_maps_top_level_key() {
+        let text = "test:\n  enabled: not-a-bool\n  version: 1\n";
+        let lines: Vec<&str> = text.lines().collect();
+        let line = line_for_path(&lines, 0, &["enabled".to_string()]);
+        assert_eq!(line, 1);
+    }
+
+    #[test]
+    fn line_for_path_maps_nested_key() {
+        let text = "test:\n  image:\n    pullPolicy: Always\n    tag: bad\n";
+        let lines: Vec<&str> = text.lines().collect();
+        let line = line_for_path(&lines, 0, &["image".to_string(), "tag".to_string()]);
+        assert_eq!(line, 3);
+    }
+
+    #[test]
+    fn line_for_path_maps_array_element() {
+        let text = "test:\n  elements:\n    - one\n    - two\n";
+        let lines: Vec<&str> = text.lines().collect();
+        let line = line_for_path(&lines, 0, &["elements".to_string(), "1".to_string()]);
+        assert_eq!(line, 3);
+    }
+
+    #[test]
+    fn line_for_path_falls_back_to_block_start() {
+        let text = "test:\n  enabled: true\n";
+        let lines: Vec<&str> = text.lines().collect();
+        // Unresolvable path falls back to the block's own line.
+        let line = line_for_path(&lines, 0, &["ghost".to_string()]);
+        assert_eq!(line, 0);
     }
 }

@@ -27,6 +27,9 @@ pub struct Completion {
     pub label: String,
     pub kind: i32,
     pub detail: Option<String>,
+    /// Optional snippet text; when present the caller emits it as `insertText`
+    /// with `insertTextFormat` Snippet (2).
+    pub insert_text: Option<String>,
 }
 
 /// Holds the current state for one open document and produces diagnostics and
@@ -62,6 +65,7 @@ impl<'a> YamlServer<'a> {
         };
 
         let mut diagnostics = Vec::new();
+        let lines: Vec<&str> = text.lines().collect();
         for block in &doc.blocks {
             let Some(reference) = block.schema_ref.as_deref() else {
                 // Unannotated block: no governing schema, no diagnostics.
@@ -72,9 +76,20 @@ impl<'a> YamlServer<'a> {
                     match crate::validator::validate(&schema, &block.value) {
                         Ok(findings) => {
                             for finding in findings {
+                                // Point the diagnostic at the specific offending
+                                // key/element line rather than the whole block.
+                                let segs: Vec<String> = finding
+                                    .instance_path
+                                    .trim_start_matches('/')
+                                    .split('/')
+                                    .filter(|s| !s.is_empty())
+                                    .map(|s| s.to_string())
+                                    .collect();
+                                let line =
+                                    crate::document::line_for_path(&lines, block.start_line, &segs);
                                 diagnostics.push(Diagnostic {
-                                    start_line: block.start_line,
-                                    end_line: block.end_line,
+                                    start_line: line,
+                                    end_line: line,
                                     message: format!(
                                         "{}: {}",
                                         finding.instance_path, finding.message
@@ -110,9 +125,10 @@ impl<'a> YamlServer<'a> {
         &self.diagnostics
     }
 
-    /// Returns completions for the block at the given 0-based line. Only
-    /// annotated, resolvable blocks yield completions.
-    pub fn complete_at_line(&mut self, line: usize) -> Vec<Completion> {
+    /// Returns completions for the block at the given 0-based line and column,
+    /// based on the cursor context (key vs value position). Only annotated,
+    /// resolvable blocks yield completions.
+    pub fn complete_at(&mut self, text: &str, line: usize, character: usize) -> Vec<Completion> {
         let Some(block) = self.document.block_at_line(line) else {
             return Vec::new();
         };
@@ -122,12 +138,19 @@ impl<'a> YamlServer<'a> {
         let ResolveOutcome::Resolved { schema } = self.resolver.resolve(reference) else {
             return Vec::new();
         };
-        completion::complete(&schema, 0)
+        let lines: Vec<&str> = text.lines().collect();
+        let (path, position) = crate::document::context(&lines, block.start_line, line, character);
+        let cursor_indent = lines
+            .get(line)
+            .map(|l| l.len() - l.trim_start().len())
+            .unwrap_or(0);
+        completion::complete(&schema, &path, position, cursor_indent + 2)
             .into_iter()
             .map(|i| Completion {
                 label: i.label,
                 kind: i.kind,
                 detail: i.detail,
+                insert_text: i.insert_text,
             })
             .collect()
     }
@@ -174,7 +197,7 @@ mod tests {
         let diags = server.diagnostics();
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("enabled"));
-        assert_eq!(diags[0].start_line, 1);
+        assert_eq!(diags[0].start_line, 2);
     }
 
     #[test]
@@ -195,7 +218,7 @@ mod tests {
         );
         let diags = server.diagnostics();
         assert_eq!(diags.len(), 1);
-        assert_eq!(diags[0].start_line, 1);
+        assert_eq!(diags[0].start_line, 2);
     }
 
     #[test]
@@ -215,14 +238,41 @@ mod tests {
     fn completion_only_in_governed_block() {
         let fetcher = fetcher_with_schema();
         let mut server = YamlServer::new(&fetcher, Path::new("/root"));
-        server.on_change(
-            "# $schema=./schemas/test.schema.json\ntest:\n  enabled: true\n\nother:\n  x: 1\n",
-        );
-        // Cursor inside `test` block yields completions.
-        let in_block = server.complete_at_line(2);
+        let text =
+            "# $schema=./schemas/test.schema.json\ntest:\n  enabled: true\n\nother:\n  x: 1\n";
+        server.on_change(text);
+        // Cursor at key position inside `test` block yields completions.
+        let in_block = server.complete_at(text, 2, 4);
         assert!(in_block.iter().any(|c| c.label == "enabled"));
         // Cursor inside unannotated `other` block yields none.
-        let other = server.complete_at_line(5);
+        let other = server.complete_at(text, 5, 4);
         assert!(other.is_empty());
+    }
+
+    #[test]
+    fn completion_value_position_suggests_boolean() {
+        let fetcher = fetcher_with_schema();
+        let mut server = YamlServer::new(&fetcher, Path::new("/root"));
+        let text = "# $schema=./schemas/test.schema.json\ntest:\n  enabled: \n";
+        server.on_change(text);
+        // Cursor after `enabled:` (value position) suggests booleans.
+        let items = server.complete_at(text, 2, 12);
+        let labels: Vec<String> = items.iter().map(|c| c.label.clone()).collect();
+        assert_eq!(labels, vec!["true".to_string(), "false".to_string()]);
+    }
+
+    #[test]
+    fn diagnostics_point_at_offending_key_line() {
+        let fetcher = fetcher_with_schema();
+        let mut server = YamlServer::new(&fetcher, Path::new("/root"));
+        // `enabled` is on line 2; the diagnostic must target that line, not the
+        // whole block.
+        server.on_change(
+            "# $schema=./schemas/test.schema.json\ntest:\n  enabled: not-a-bool\n  extra: 1\n",
+        );
+        let diags = server.diagnostics();
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].start_line, 2);
+        assert_eq!(diags[0].end_line, 2);
     }
 }
