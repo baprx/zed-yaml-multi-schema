@@ -1,0 +1,49 @@
+[package]
+name = "zed-yaml-multi-schema"
+version = "0.1.0"
+edition = "2021"
+description = "Zed extension for per-block JSON Schema validation of YAML (Helm umbrella mode)"
+license = "MIT"
+
+[lib]
+name = "zed_yaml_multi_schema"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "zed-yaml-multi-schema-lsp"
+path = "src/main.rs"
+
+[dependencies]
+zed_extension_api = "0.7.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+jsonschema = "0.28"
+url = "2"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+ureq = "2"
+
+
+[dev-dependencies]
+tempfile = "3"
+
+[[test]]
+name = "annotation_validation"
+path = "tests/integration/annotation_validation.rs"
+
+[[test]]
+name = "multi_block"
+path = "tests/integration/multi_block.rs"
+
+[[test]]
+name = "isolation"
+path = "tests/integration/isolation.rs"
+
+[[test]]
+name = "resolution"
+path = "tests/integration/resolution.rs"
+
+[[test]]
+name = "real_schema"
+path = "tests/integration/real_schema.rs"

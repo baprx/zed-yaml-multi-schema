@@ -1,2 +1,13 @@
-!.specify/
-!specs
+# Rust
+/target/
+Cargo.lock.orig
+*.rs.bk
+*.rlib
+*.profraw
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
