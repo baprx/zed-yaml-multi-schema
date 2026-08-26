@@ -18,6 +18,29 @@ is not the file root, and several charts share one `values.yaml`).
 - **Non-intrusive**: the extension only analyzes and validates; it never rewrites
   or reorders your YAML.
 
+## Installation
+
+Install as a **dev extension** while developing, or from the extensions registry
+once published.
+
+**Dev extension (from source):**
+
+1. Ensure [Rust](https://rustup.rs) is installed (Zed installs the `wasm32-wasip2`
+   target automatically).
+2. Build the bundled language-server binary and place it on your `PATH`:
+   ```bash
+   cargo build --release
+   cp target/release/zed-yaml-multi-schema-lsp ~/.local/bin/
+   ```
+   (`language_server_command` looks up `zed-yaml-multi-schema-lsp` on the `PATH`.)
+3. In Zed: open the Extensions panel (`zed: extensions`), click
+   **Install Dev Extension**, and select this repository's directory.
+4. Reload or reopen a YAML file; the extension attaches to YAML and provides
+   per-block diagnostics and completions.
+
+**From the registry:** search for "Zed YAML Multi-Schema" in the Extensions panel
+and click **Install** (once published).
+
 ## Usage
 
 Place a `# $schema=<ref>` comment directly above a top-level block:

@@ -2,11 +2,43 @@
 
 mod common;
 
+use std::cell::RefCell;
 use std::path::Path;
+use std::rc::Rc;
+
+use zed_yaml_multi_schema::resolver::SchemaFetcher;
+use zed_yaml_multi_schema::server::YamlServer;
 
 use common::{FakeFetcher, REMOTE_SCHEMA};
 
 const ROOT: &str = "/repo";
+
+/// Fetcher whose remote map can be populated lazily, to test retry-on-change.
+struct GrowingFetcher {
+    remote: Rc<RefCell<Vec<String>>>,
+}
+
+impl GrowingFetcher {
+    fn new() -> Self {
+        Self {
+            remote: Rc::new(RefCell::new(Vec::new())),
+        }
+    }
+}
+
+impl SchemaFetcher for GrowingFetcher {
+    fn read_local(&self, _path: &str) -> Result<String, String> {
+        Err("no local".to_string())
+    }
+
+    fn fetch_remote(&self, url: &str) -> Result<String, String> {
+        if self.remote.borrow().contains(&url.to_string()) {
+            Ok(REMOTE_SCHEMA.to_string())
+        } else {
+            Err(format!("unavailable: {url}"))
+        }
+    }
+}
 
 #[test]
 fn remote_https_schema_resolves_and_applies() {
@@ -45,4 +77,27 @@ fn unreachable_schema_yields_warning_and_keeps_file_editable() {
     // produces no diagnostics.
     server.on_change("other:\n  x: 1\n");
     assert!(server.diagnostics().is_empty());
+}
+
+#[test]
+fn previously_failed_reference_is_retried_on_subsequent_change() {
+    let fetcher = GrowingFetcher::new();
+    let mut server = YamlServer::new(&fetcher, Path::new(ROOT));
+
+    // First change: reference is unreachable -> a single warning diagnostic.
+    let url = "https://example.com/chart/values.schema.json";
+    server.on_change(&format!("# $schema={url}\nchart:\n  enabled: true\n"));
+    let diags = server.diagnostics();
+    assert_eq!(diags.len(), 1);
+    assert_eq!(diags[0].severity, "warning");
+
+    // The reference becomes reachable; a later change must re-attempt it and
+    // recover to a fully-validated block (no warning remains).
+    fetcher.remote.borrow_mut().push(url.to_string());
+    server.on_change(&format!("# $schema={url}\nchart:\n  enabled: true\n"));
+    assert!(
+        server.diagnostics().is_empty(),
+        "failed reference was not re-attempted: {:?}",
+        server.diagnostics()
+    );
 }

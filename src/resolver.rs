@@ -75,13 +75,19 @@ impl<'a> SchemaResolver<'a> {
     }
 
     /// Resolves `reference`, using the cache when available.
+    ///
+    /// Successful resolutions are cached; failures are not, so a reference that
+    /// becomes resolvable later (e.g. after a transient network error) is
+    /// re-attempted on the next call.
     pub fn resolve(&mut self, reference: &str) -> ResolveOutcome {
         if let Some(cached) = self.cache.get(reference) {
             return cached.clone();
         }
 
         let outcome = self.resolve_uncached(reference);
-        self.cache.insert(reference.to_string(), outcome.clone());
+        if let ResolveOutcome::Resolved { .. } = &outcome {
+            self.cache.insert(reference.to_string(), outcome.clone());
+        }
         outcome
     }
 
@@ -119,11 +125,6 @@ impl<'a> SchemaResolver<'a> {
                 reason: format!("invalid JSON schema '{reference}': {e}"),
             },
         }
-    }
-
-    /// Removes a previously-failed reference so it can be retried.
-    pub fn invalidate(&mut self, reference: &str) {
-        self.cache.remove(reference);
     }
 }
 

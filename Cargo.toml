@@ -45,5 +45,9 @@ name = "resolution"
 path = "tests/integration/resolution.rs"
 
 [[test]]
+name = "example_values"
+path = "tests/integration/example_values.rs"
+
+[[test]]
 name = "real_schema"
 path = "tests/integration/real_schema.rs"
