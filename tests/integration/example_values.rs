@@ -5,9 +5,9 @@ mod common;
 
 use std::path::Path;
 
-use zed_yaml_multi_schema::document::Document;
-use zed_yaml_multi_schema::resolver::SchemaFetcher;
-use zed_yaml_multi_schema::server::YamlServer;
+use yaml_multi_schema::document::Document;
+use yaml_multi_schema::resolver::SchemaFetcher;
+use yaml_multi_schema::server::YamlServer;
 
 /// Reads the real local schema from disk and serves any remote HTTPS reference
 /// with a valid schema, so no network access is needed.

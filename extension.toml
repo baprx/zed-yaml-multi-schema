@@ -1,11 +1,11 @@
-id = "zed-yaml-multi-schema"
-name = "Zed YAML Multi-Schema"
+id = "yaml-multi-schema"
+name = "YAML Multi-Schema"
 version = "0.3.0"
 schema_version = 1
-authors = ["Zed YAML Multi-Schema contributors"]
+authors = ["YAML Multi-Schema contributors"]
 description = "Per-block JSON Schema validation and completion for YAML files (Helm umbrella mode)."
 repository = ""
 
-[language_servers.zed-yaml-multi-schema]
-name = "Zed YAML Multi-Schema LSP"
+[language_servers.yaml-multi-schema]
+name = "YAML Multi-Schema LSP"
 languages = ["YAML"]

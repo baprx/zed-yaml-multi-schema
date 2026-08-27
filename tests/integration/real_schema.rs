@@ -10,7 +10,7 @@ fn real_draft07_schema_still_validates() {
     let value: serde_yaml::Value =
         serde_yaml::from_str("enabled: not-a-bool\nelements: [1]\nproduct: anch\nversion: 1\n")
             .unwrap();
-    let findings = zed_yaml_multi_schema::validator::validate(&schema, &value).unwrap();
+    let findings = yaml_multi_schema::validator::validate(&schema, &value).unwrap();
     assert!(
         !findings.is_empty(),
         "draft-07 schema did not reject a string for a boolean"
@@ -19,6 +19,6 @@ fn real_draft07_schema_still_validates() {
     let ok: serde_yaml::Value =
         serde_yaml::from_str("enabled: true\nelements: [1, A]\nproduct: anch\nversion: 1\n")
             .unwrap();
-    let findings = zed_yaml_multi_schema::validator::validate(&schema, &ok).unwrap();
+    let findings = yaml_multi_schema::validator::validate(&schema, &ok).unwrap();
     assert!(findings.is_empty(), "valid values should pass");
 }

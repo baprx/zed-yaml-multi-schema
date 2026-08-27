@@ -25,8 +25,8 @@ impl Extension for YamlMultiSchemaExtension {
         // compiled as a bin target) that speaks LSP over stdio. Locate it on
         // the PATH and launch it.
         let binary_path = worktree
-            .which("zed-yaml-multi-schema-lsp")
-            .ok_or_else(|| "zed-yaml-multi-schema-lsp not found in PATH".to_string())?;
+            .which("yaml-multi-schema-lsp")
+            .ok_or_else(|| "yaml-multi-schema-lsp not found in PATH".to_string())?;
         Ok(Command::new(binary_path))
     }
 }

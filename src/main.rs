@@ -9,8 +9,8 @@ use std::io::{self, BufRead, Write};
 use std::path::Path;
 
 use serde_json::{json, Value};
-use zed_yaml_multi_schema::resolver::{ResolveKind, SchemaFetcher};
-use zed_yaml_multi_schema::server::YamlServer;
+use yaml_multi_schema::resolver::{ResolveKind, SchemaFetcher};
+use yaml_multi_schema::server::YamlServer;
 
 /// Fetcher that reads local files from disk and remote HTTPS URLs via `ureq`.
 struct FsFetcher;
@@ -79,7 +79,7 @@ fn main() -> io::Result<()> {
     let mut documents: HashMap<String, String> = HashMap::new();
 
     eprintln!(
-        "zed-yaml-multi-schema-lsp: started (worktree root: {})",
+        "yaml-multi-schema-lsp: started (worktree root: {})",
         root.display()
     );
 
@@ -94,7 +94,7 @@ fn main() -> io::Result<()> {
 
         match method {
             Some("initialize") => {
-                eprintln!("zed-yaml-multi-schema-lsp: initialize");
+                eprintln!("yaml-multi-schema-lsp: initialize");
                 send(&mut out, id, Some(initialize_result()), None)?;
             }
             Some("initialized") | Some("textDocument/didClose") => {}
@@ -110,7 +110,7 @@ fn main() -> io::Result<()> {
                     documents.insert(uri.to_string(), text.clone());
                     server.on_change(&text);
                     eprintln!(
-                        "zed-yaml-multi-schema-lsp: {} {} ({}) -> {} diagnostic(s)",
+                        "yaml-multi-schema-lsp: {} {} ({}) -> {} diagnostic(s)",
                         method.unwrap_or("?"),
                         uri,
                         text.lines().count(),
@@ -135,7 +135,7 @@ fn main() -> io::Result<()> {
                 let text = documents.get(uri).cloned().unwrap_or_default();
                 let completions = server.complete_at(&text, line, character);
                 eprintln!(
-                    "zed-yaml-multi-schema-lsp: completion at {}:{} of {} -> {} item(s)",
+                    "yaml-multi-schema-lsp: completion at {}:{} of {} -> {} item(s)",
                     line,
                     character,
                     uri,
@@ -199,7 +199,7 @@ fn initialize_result() -> Value {
                 "triggerCharacters": trigger_chars
             }
         },
-        "serverInfo": {"name": "zed-yaml-multi-schema", "version": "0.3.0"}
+        "serverInfo": {"name": "yaml-multi-schema", "version": "0.3.0"}
     })
 }
 
@@ -222,7 +222,7 @@ fn publish_diagnostics(
                 },
                 "severity": lsp_severity(&d.severity),
                 "message": d.message,
-                "source": "zed-yaml-multi-schema"
+                "source": "yaml-multi-schema"
             })
         })
         .collect();

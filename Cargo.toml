@@ -6,11 +6,11 @@ description = "Zed extension for per-block JSON Schema validation of YAML (Helm 
 license = "MIT"
 
 [lib]
-name = "zed_yaml_multi_schema"
+name = "yaml_multi_schema"
 crate-type = ["cdylib", "rlib"]
 
 [[bin]]
-name = "zed-yaml-multi-schema-lsp"
+name = "yaml-multi-schema-lsp"
 path = "src/main.rs"
 required-features = ["lsp-bin"]
 
