@@ -11,9 +11,12 @@ pub struct CompletionItem {
     /// LSP `CompletionItemKind` (integer enum), e.g. 10 = Property.
     pub kind: i32,
     pub detail: Option<String>,
-    /// Optional `insertText`. When present and containing snippet syntax
-    /// (`${n}` tab stops), the caller must set `insertTextFormat` to Snippet (2).
+    /// Optional `insertText`. When present, the caller emits it as `insertText`
+    /// with the format given by `insert_text_format`.
     pub insert_text: Option<String>,
+    /// LSP `InsertTextFormat` (1 = PlainText, 2 = Snippet) to use with
+    /// `insert_text`, when present.
+    pub insert_text_format: Option<i32>,
 }
 
 /// Returns completions for `schema` at the given `path`, depending on whether
@@ -34,6 +37,7 @@ pub fn complete(
     match position {
         CursorPosition::Key => keys(node, existing_keys),
         CursorPosition::Value => values(node, child_indent),
+        CursorPosition::Invalid => Vec::new(),
     }
 }
 
@@ -64,7 +68,8 @@ fn keys(schema: &Value, existing_keys: &[String]) -> Vec<CompletionItem> {
                 .get("description")
                 .and_then(|d| d.as_str())
                 .map(String::from),
-            insert_text: None,
+            insert_text: Some(format!("{name}: ")),
+            insert_text_format: Some(1),
         });
     }
     items
@@ -95,18 +100,21 @@ fn values(schema: &Value, child_indent: usize) -> Vec<CompletionItem> {
             kind: 11,
             detail: None,
             insert_text: None,
+            insert_text_format: None,
         }),
         Some("string") => items.push(CompletionItem {
             label: "\"\"".to_string(),
             kind: 10,
             detail: Some("string".to_string()),
             insert_text: None,
+            insert_text_format: None,
         }),
         Some("number") | Some("integer") => items.push(CompletionItem {
             label: "0".to_string(),
             kind: 12,
             detail: None,
             insert_text: None,
+            insert_text_format: None,
         }),
         _ => {}
     }
@@ -155,6 +163,7 @@ fn object_snippet(schema: &Value, child_indent: usize) -> CompletionItem {
         kind: 9, // Module / structure
         detail: Some("structure".to_string()),
         insert_text: Some(snippet),
+        insert_text_format: Some(2),
     }
 }
 
@@ -177,6 +186,7 @@ fn value_item(v: &Value) -> CompletionItem {
         kind,
         detail: None,
         insert_text: None,
+        insert_text_format: None,
     }
 }
 
@@ -225,6 +235,17 @@ mod tests {
         let labels: Vec<String> = items.iter().map(|i| i.label.clone()).collect();
         assert!(labels.contains(&"enabled".to_string()));
         assert!(labels.contains(&"version".to_string()));
+    }
+
+    #[test]
+    fn key_items_append_colon_in_insert_text() {
+        let items = complete(&schema(), &[], CursorPosition::Key, 0, &[]);
+        let product = items
+            .iter()
+            .find(|i| i.label == "enabled")
+            .expect("key present");
+        assert_eq!(product.insert_text.as_deref(), Some("enabled: "));
+        assert_eq!(product.insert_text_format, Some(1));
     }
 
     #[test]

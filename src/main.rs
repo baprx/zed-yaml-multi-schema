@@ -95,14 +95,7 @@ fn main() -> io::Result<()> {
         match method {
             Some("initialize") => {
                 eprintln!("zed-yaml-multi-schema-lsp: initialize");
-                let resp = json!({
-                    "capabilities": {
-                        "textDocumentSync": 1,
-                        "completionProvider": {"resolveProvider": false}
-                    },
-                    "serverInfo": {"name": "zed-yaml-multi-schema", "version": "0.2.2"}
-                });
-                send(&mut out, id, Some(resp), None)?;
+                send(&mut out, id, Some(initialize_result()), None)?;
             }
             Some("initialized") | Some("textDocument/didClose") => {}
             Some("textDocument/didOpen") | Some("textDocument/didChange") => {
@@ -153,9 +146,11 @@ fn main() -> io::Result<()> {
                     .map(|c| {
                         let mut item =
                             json!({"label": c.label, "kind": c.kind, "detail": c.detail});
-                        if let Some(snippet) = c.insert_text {
-                            item["insertText"] = json!(snippet);
-                            item["insertTextFormat"] = json!(2); // Snippet
+                        if let Some(text) = c.insert_text {
+                            item["insertText"] = json!(text);
+                            if let Some(fmt) = c.insert_text_format {
+                                item["insertTextFormat"] = json!(fmt);
+                            }
                         }
                         item
                     })
@@ -186,6 +181,26 @@ fn main() -> io::Result<()> {
         out.flush()?;
     }
     Ok(())
+}
+
+fn initialize_result() -> Value {
+    let mut trigger_chars: Vec<String> = (b'a'..=b'z')
+        .chain(b'A'..=b'Z')
+        .map(|c| char::from(c).to_string())
+        .collect();
+    // Declaring letters as trigger characters makes Zed open the completion menu
+    // as soon as a key name is typed on a fresh line, not only after ':'/'-'.
+    trigger_chars.extend([":".to_string(), "-".to_string()]);
+    json!({
+        "capabilities": {
+            "textDocumentSync": 1,
+            "completionProvider": {
+                "resolveProvider": false,
+                "triggerCharacters": trigger_chars
+            }
+        },
+        "serverInfo": {"name": "zed-yaml-multi-schema", "version": "0.3.0"}
+    })
 }
 
 fn publish_diagnostics(
@@ -301,5 +316,19 @@ mod tests {
     fn document_text_absent_when_no_text() {
         let params = json!({"textDocument": {"uri": "file:///a.yaml"}});
         assert_eq!(document_text(&params), None);
+    }
+
+    #[test]
+    fn initialize_declares_completion_trigger_characters() {
+        let resp = initialize_result();
+        let chars = resp["capabilities"]["completionProvider"]["triggerCharacters"]
+            .as_array()
+            .unwrap();
+        assert!(chars.iter().any(|c| c == ":"), "should trigger on ':'");
+        assert!(chars.iter().any(|c| c == "-"), "should trigger on '-'");
+        assert!(
+            chars.iter().any(|c| c == "i"),
+            "should trigger on letters so key names auto-complete while typing"
+        );
     }
 }

@@ -27,9 +27,12 @@ pub struct Completion {
     pub label: String,
     pub kind: i32,
     pub detail: Option<String>,
-    /// Optional snippet text; when present the caller emits it as `insertText`
-    /// with `insertTextFormat` Snippet (2).
+    /// Optional `insertText`. When present, the caller emits it as `insertText`
+    /// with the format given by `insert_text_format`.
     pub insert_text: Option<String>,
+    /// LSP `InsertTextFormat` (1 = PlainText, 2 = Snippet) to use with
+    /// `insert_text`, when present.
+    pub insert_text_format: Option<i32>,
 }
 
 /// Holds the current state for one open document and produces diagnostics and
@@ -56,9 +59,10 @@ impl<'a> YamlServer<'a> {
         let doc = match Document::parse(text) {
             Ok(doc) => doc,
             Err(_) => {
-                // If the document is not valid YAML, drop state and clear
-                // diagnostics; the editor stays usable.
-                self.document = Document::default();
+                // Mid-edit documents are often temporarily invalid YAML (e.g.
+                // a key typed before its colon). Keep the last good parse so
+                // completions keep working; diagnostics are cleared until the
+                // document parses again.
                 self.diagnostics = Vec::new();
                 return;
             }
@@ -129,22 +133,41 @@ impl<'a> YamlServer<'a> {
     /// based on the cursor context (key vs value position). Only annotated,
     /// resolvable blocks yield completions.
     pub fn complete_at(&mut self, text: &str, line: usize, character: usize) -> Vec<Completion> {
-        let Some(block) = self.document.block_at_line(line) else {
-            return Vec::new();
-        };
-        let Some(reference) = block.schema_ref.as_deref() else {
-            return Vec::new();
-        };
-        let ResolveOutcome::Resolved { schema } = self.resolver.resolve(reference) else {
-            return Vec::new();
-        };
         let lines: Vec<&str> = text.lines().collect();
-        let (path, position) = crate::document::context(&lines, block.start_line, line, character);
+        // Prefer the parsed document; when it has no block for the cursor
+        // (document unparsed or temporarily invalid YAML), fall back to a
+        // scan of the raw lines so typing a key name still completes.
+        let (start_line, reference, value) = match self.document.block_at_line(line) {
+            Some(block) => (
+                block.start_line,
+                block.schema_ref.clone(),
+                Some(block.value.clone()),
+            ),
+            None => match crate::document::block_span_at_line(&lines, line) {
+                Some((key_line, Some(reference))) => (key_line, Some(reference), None),
+                _ => return Vec::new(),
+            },
+        };
+        let Some(reference) = reference else {
+            return Vec::new();
+        };
+        let ResolveOutcome::Resolved { schema } = self.resolver.resolve(&reference) else {
+            return Vec::new();
+        };
+        let (path, position) = crate::document::context(&lines, start_line, line, character);
         let cursor_indent = lines
             .get(line)
             .map(|l| l.len() - l.trim_start().len())
             .unwrap_or(0);
-        let existing_keys = existing_keys(&block.value, &path);
+        let existing_keys = match value {
+            Some(value) => existing_keys(&value, &path),
+            // Sibling keys derived from the raw lines are only a faithful
+            // duplicate filter at the block's top level; deeper paths skip it.
+            None if path.is_empty() => {
+                crate::document::sibling_keys(&lines, start_line, cursor_indent)
+            }
+            None => Vec::new(),
+        };
         completion::complete(&schema, &path, position, cursor_indent + 2, &existing_keys)
             .into_iter()
             .map(|i| Completion {
@@ -152,6 +175,7 @@ impl<'a> YamlServer<'a> {
                 kind: i.kind,
                 detail: i.detail,
                 insert_text: i.insert_text,
+                insert_text_format: i.insert_text_format,
             })
             .collect()
     }
@@ -211,6 +235,18 @@ mod tests {
         FakeFetcher { local }
     }
 
+    /// Schema mirroring `schemas/test.schema.json`: several root properties so
+    /// key-completion tests can assert which names are suggested.
+    fn fetcher_with_full_schema() -> FakeFetcher {
+        let mut local = HashMap::new();
+        local.insert(
+            "/root/schemas/test.schema.json".to_string(),
+            r#"{"type":"object","properties":{"enabled":{"type":"boolean"},"elements":{"type":"array"},"product":{"type":"string"},"version":{"type":"number"},"image":{"type":"object"}},"required":["enabled"]}"#
+                .to_string(),
+        );
+        FakeFetcher { local }
+    }
+
     #[test]
     fn diagnostics_scoped_to_annotated_block() {
         let fetcher = fetcher_with_schema();
@@ -259,6 +295,20 @@ mod tests {
     }
 
     #[test]
+    fn key_completion_carries_colon() {
+        let fetcher = fetcher_with_schema();
+        let mut server = YamlServer::new(&fetcher, Path::new("/root"));
+        let text = "# $schema=./schemas/test.schema.json\ntest:\n  \n  extra: x\n";
+        server.on_change(text);
+        let items = server.complete_at(text, 2, 2);
+        let item = items
+            .iter()
+            .find(|c| c.label == "enabled")
+            .expect("key present");
+        assert_eq!(item.insert_text.as_deref(), Some("enabled: "));
+    }
+
+    #[test]
     fn completion_only_in_governed_block() {
         let fetcher = fetcher_with_schema();
         let mut server = YamlServer::new(&fetcher, Path::new("/root"));
@@ -294,6 +344,24 @@ mod tests {
     }
 
     #[test]
+    fn completion_empty_at_invalid_indentation() {
+        let mut local = HashMap::new();
+        local.insert(
+            "/root/schemas/test.schema.json".to_string(),
+            r#"{"type":"object","properties":{"enabled":{"type":"boolean"},"version":{"type":"number"}}}"#
+                .to_string(),
+        );
+        let fetcher = FakeFetcher { local };
+        let mut server = YamlServer::new(&fetcher, Path::new("/root"));
+        // Cursor at indent 0 (column 0) inside the `test` block is invalid.
+        let text =
+            "# $schema=./schemas/test.schema.json\ntest:\n  enabled: true\n  version: 1\n\n  product: r\n";
+        server.on_change(text);
+        let items = server.complete_at(text, 4, 0);
+        assert!(items.is_empty());
+    }
+
+    #[test]
     fn completion_value_position_suggests_boolean() {
         let fetcher = fetcher_with_schema();
         let mut server = YamlServer::new(&fetcher, Path::new("/root"));
@@ -303,6 +371,30 @@ mod tests {
         let items = server.complete_at(text, 2, 12);
         let labels: Vec<String> = items.iter().map(|c| c.label.clone()).collect();
         assert_eq!(labels, vec!["true".to_string(), "false".to_string()]);
+    }
+
+    #[test]
+    fn completion_suggests_while_typing_partial_key() {
+        let fetcher = fetcher_with_full_schema();
+        let mut server = YamlServer::new(&fetcher, Path::new("/root"));
+        // `im` is typed without its colon, so the document is temporarily
+        // invalid YAML; completions must still be offered from the raw lines.
+        let text = "# $schema=./schemas/test.schema.json\ntest:\n  enabled: true\n  elements:\n    - 1\n    - A\n  im\n  product: r\n  version: 1\n";
+        server.on_change(text);
+        let items = server.complete_at(text, 6, 4);
+        let labels: Vec<String> = items.iter().map(|c| c.label.clone()).collect();
+        assert_eq!(labels, vec!["image".to_string()]);
+    }
+
+    #[test]
+    fn completion_on_empty_line_with_siblings_below() {
+        let fetcher = fetcher_with_full_schema();
+        let mut server = YamlServer::new(&fetcher, Path::new("/root"));
+        let text = "# $schema=./schemas/test.schema.json\ntest:\n  enabled: true\n  elements:\n    - 1\n    - A\n  \n  product: r\n  version: 1\n";
+        server.on_change(text);
+        let items = server.complete_at(text, 6, 2);
+        let labels: Vec<String> = items.iter().map(|c| c.label.clone()).collect();
+        assert_eq!(labels, vec!["image".to_string()]);
     }
 
     #[test]

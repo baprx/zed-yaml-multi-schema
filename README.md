@@ -62,7 +62,7 @@ traefik:
     tag: 1.1.1
 
 kubernetes:
-  kind: ConfigMap   # unannotated blocks are supported without a schema
+  kind: ConfigMap # unannotated blocks are supported without a schema
 ```
 
 - The `$schema` reference is either a **local relative path** (resolved against
@@ -90,8 +90,6 @@ The extension ships a bundled LSP server (`src/main.rs`) launched via
 - `src/validator.rs` — JSON Schema validation (draft detected from `$schema`)
 - `src/completion.rs` — derive completions from a schema
 - `src/server.rs` — per-block diagnostics/completions facade (testable without WASM)
-
-Design documents live under `specs/001-multi-schema-validation/`.
 
 ## License
 

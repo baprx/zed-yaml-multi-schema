@@ -155,12 +155,70 @@ impl Document {
     }
 }
 
+/// Locates, without YAML parsing, the top-level block containing `line`: the
+/// last top-level key at or above `line`, plus the `# $schema=` annotation
+/// directly above that key (only blank/comment lines in between), if any.
+/// Used when the document cannot be parsed — e.g. a key typed before its
+/// colon — so completions keep working from the raw lines.
+pub fn block_span_at_line(lines: &[&str], line: usize) -> Option<(usize, Option<String>)> {
+    if line >= lines.len() {
+        return None;
+    }
+    let key_line = (0..=line)
+        .rev()
+        .find(|&i| is_top_level_key_line(lines[i]))?;
+    let mut schema_ref = None;
+    for i in (0..key_line).rev() {
+        let trimmed = lines[i].trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            if schema_ref.is_none() {
+                schema_ref = parse_annotation(lines[i]);
+            }
+            continue;
+        }
+        break;
+    }
+    Some((key_line, schema_ref))
+}
+
+/// Collects, without YAML parsing, the mapping keys at `cursor_indent` within
+/// the block starting at `start_line` (up to the next top-level key), for
+/// duplicate filtering while the document is temporarily invalid. Partial
+/// keys being typed (no colon yet) are not mapping keys and are excluded.
+pub fn sibling_keys(lines: &[&str], start_line: usize, cursor_indent: usize) -> Vec<String> {
+    let mut keys: Vec<String> = Vec::new();
+    for line in lines.iter().skip(start_line + 1) {
+        if is_top_level_key_line(line) {
+            break;
+        }
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with("- ") {
+            continue;
+        }
+        let indent = line.len() - trimmed.len();
+        if indent != cursor_indent {
+            continue;
+        }
+        if let Some((key, _)) = trimmed.split_once(':') {
+            let key = key.trim().trim_matches(['"', '\'']);
+            if !key.is_empty() && !keys.iter().any(|k| k == key) {
+                keys.push(key.to_string());
+            }
+        }
+    }
+    keys
+}
+
 /// Whether the cursor is at a key position (choosing a property name) or a
 /// value position (choosing a value after `key:`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CursorPosition {
     Key,
     Value,
+    /// The cursor sits at an indentation that cannot be a child of the
+    /// enclosing map (e.g. a key at column 0 inside a block), so no completion
+    /// should be offered.
+    Invalid,
 }
 
 /// Computes the completion context at the cursor within a block:
@@ -190,6 +248,11 @@ pub fn context(
             break;
         }
     }
+    let parent_indent = stack
+        .last()
+        .map(|&(si, _)| si)
+        .unwrap_or_else(|| indent_of(lines[start_line]));
+    let expected_child_indent = parent_indent + 2;
     let enclosing: Vec<String> = stack.into_iter().map(|(_, k)| k).collect();
 
     let trimmed = cur.trim();
@@ -205,6 +268,9 @@ pub fn context(
                 }
             }
         }
+    }
+    if cursor_indent < expected_child_indent {
+        return (Vec::new(), CursorPosition::Invalid);
     }
     (enclosing, CursorPosition::Key)
 }
@@ -338,6 +404,44 @@ mod tests {
     use super::*;
 
     #[test]
+    fn block_span_at_line_finds_key_and_annotation() {
+        let text =
+            "# $schema=./schemas/test.schema.json\ntest:\n  enabled: true\n  im\n  product: r\n";
+        let lines: Vec<&str> = text.lines().collect();
+        let (key_line, schema_ref) = block_span_at_line(&lines, 3).expect("block found");
+        assert_eq!(key_line, 1);
+        assert_eq!(schema_ref.as_deref(), Some("./schemas/test.schema.json"));
+    }
+
+    #[test]
+    fn block_span_at_line_none_above_first_key() {
+        let text = "# $schema=./schemas/test.schema.json\ntest:\n";
+        let lines: Vec<&str> = text.lines().collect();
+        assert!(block_span_at_line(&lines, 0).is_none());
+    }
+
+    #[test]
+    fn sibling_keys_collect_indent_matches_across_cursor() {
+        let text = "test:\n  enabled: true\n  elements:\n    - 1\n  im\n  product: r\n";
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(
+            sibling_keys(&lines, 0, 2),
+            vec![
+                "enabled".to_string(),
+                "elements".to_string(),
+                "product".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn sibling_keys_stop_at_next_top_level_key() {
+        let text = "test:\n  enabled: true\n\ntraefik:\n  enabled: false\n";
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(sibling_keys(&lines, 0, 2), vec!["enabled".to_string()]);
+    }
+
+    #[test]
     fn maps_annotation_to_block() {
         let text = "---\n# $schema=./schemas/test.schema.json\ntest:\n  enabled: true\n\ntraefik:\n  image:\n    tag: 1.1.1\n";
         let doc = Document::parse(text).unwrap();
@@ -416,6 +520,24 @@ mod tests {
         // Cursor at indent 6 (deeper than pullPolicy) nests inside pullPolicy.
         let (path, _) = context(&lines, 0, 3, 6);
         assert_eq!(path, vec!["image".to_string(), "pullPolicy".to_string()]);
+    }
+
+    #[test]
+    fn context_rejects_too_shallow_key_indentation() {
+        // `test`'s children must be at indent 2; a cursor at indent 0 is invalid.
+        let text = "test:\n  enabled: true\n  elements:\n    - 1\n    - A\n\n  product: r\n";
+        let lines: Vec<&str> = text.lines().collect();
+        let (path, pos) = context(&lines, 0, 5, 0);
+        assert_eq!(path, Vec::<String>::new());
+        assert_eq!(pos, CursorPosition::Invalid);
+    }
+
+    #[test]
+    fn context_accepts_valid_child_indentation() {
+        let text = "test:\n  enabled: true\n  \n";
+        let lines: Vec<&str> = text.lines().collect();
+        let (_, pos) = context(&lines, 0, 2, 2);
+        assert_eq!(pos, CursorPosition::Key);
     }
 
     #[test]
