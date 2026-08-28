@@ -6,8 +6,8 @@ use std::cell::RefCell;
 use std::path::Path;
 use std::rc::Rc;
 
-use yaml_multi_schema::resolver::SchemaFetcher;
-use yaml_multi_schema::server::YamlServer;
+use zed_yaml_multi_schema::resolver::SchemaFetcher;
+use zed_yaml_multi_schema::server::YamlServer;
 
 use common::{FakeFetcher, REMOTE_SCHEMA};
 

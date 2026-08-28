@@ -29,27 +29,30 @@ is not the file root, and several charts share one `values.yaml`).
 
 ## Installation
 
-Install as a **dev extension** while developing, or from the extensions registry
-once published.
+### From the registry (recommended)
+
+Search for "YAML Multi-Schema" in Zed's Extensions panel and click **Install** —
+no manual steps. The extension downloads the matching `yaml-multi-schema-lsp`
+binary for your platform from this repository's GitHub release automatically
+(macOS arm64/x64 and Linux x64) and keeps it in a versioned cache.
 
 ### Dev extension (from source)
 
+Only needed when developing the extension itself:
+
 1. Ensure [Rust](https://rustup.rs) is installed (Zed installs the `wasm32-wasip2`
    target automatically).
-2. Build the bundled language-server binary and place it on your `PATH`:
+2. Build the language-server binary and place it on your `PATH`:
    ```bash
    cargo build --release --features lsp-bin
    cp target/release/yaml-multi-schema-lsp ~/.local/bin/
    ```
-   (`language_server_command` looks up `yaml-multi-schema-lsp` on the `PATH`.)
+   (A binary on the `PATH` is preferred over the downloaded one, so dev builds
+   take effect without touching the cache.)
 3. In Zed: open the Extensions panel (`zed: extensions`), click
    **Install Dev Extension**, and select this repository's directory.
 4. Reload or reopen a YAML file; the extension attaches to YAML and provides
    per-block diagnostics and completions.
-
-### From the registry
-
-Search for "YAML Multi-Schema" in the Extensions panel and click **Install**.
 
 ## Usage
 
@@ -100,3 +103,7 @@ cargo test           # unit + integration tests (test-first)
 cargo clippy --all-targets -- -D warnings
 cargo fmt -- --check
 ```
+
+## License
+
+Distributed under the [GPL-3.0](LICENSE.txt) license.

@@ -9,8 +9,8 @@ use std::io::{self, BufRead, Write};
 use std::path::Path;
 
 use serde_json::{json, Value};
-use yaml_multi_schema::resolver::{ResolveKind, SchemaFetcher};
-use yaml_multi_schema::server::YamlServer;
+use zed_yaml_multi_schema::resolver::{ResolveKind, SchemaFetcher};
+use zed_yaml_multi_schema::server::YamlServer;
 
 /// Fetcher that reads local files from disk and remote HTTPS URLs via `ureq`.
 struct FsFetcher;
@@ -199,7 +199,7 @@ fn initialize_result() -> Value {
                 "triggerCharacters": trigger_chars
             }
         },
-        "serverInfo": {"name": "yaml-multi-schema", "version": "0.3.0"}
+        "serverInfo": {"name": "yaml-multi-schema", "version": env!("CARGO_PKG_VERSION")}
     })
 }
 
