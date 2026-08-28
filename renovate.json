@@ -1,11 +1,12 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    ":rebaseStalePrs",
+    ":disableRateLimiting",
     ":enablePreCommit",
+    ":rebaseStalePrs",
     "config:recommended",
-    "mergeConfidence:all-badges",
-    "helpers:pinGitHubActionDigests"
+    "helpers:pinGitHubActionDigests",
+    "mergeConfidence:all-badges"
   ],
   "minimumReleaseAge": "7 days",
   "minimumReleaseAgeBehaviour": "timestamp-optional"
