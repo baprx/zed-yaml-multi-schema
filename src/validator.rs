@@ -29,7 +29,7 @@ pub fn validate(
     let mut findings = Vec::new();
     for error in validator.iter_errors(&instance) {
         findings.push(Finding {
-            instance_path: error.instance_path.to_string(),
+            instance_path: error.instance_path().to_string(),
             message: error.to_string(),
         });
     }
