@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.1](https://github.com/baprx/zed-yaml-multi-schema/compare/v0.6.0...v0.6.1) (2026-08-28)
+
+
+### Bug Fixes
+
+* **deps:** update rust crate jsonschema to 0.50 ([f10b2be](https://github.com/baprx/zed-yaml-multi-schema/commit/f10b2be850eadc63c91207709abecbaf4d39a553))
+* **deps:** update rust crate jsonschema to 0.50 ([c7ec507](https://github.com/baprx/zed-yaml-multi-schema/commit/c7ec50776e2c072cafe7665a6cc54dbfcf2d6ee3))
+* **deps:** update rust crate ureq to v3 ([2e7bf2e](https://github.com/baprx/zed-yaml-multi-schema/commit/2e7bf2e0baea4d8f54c6f1af6ffe4b3294008216))
+* **deps:** update rust crate ureq to v3 ([b866da3](https://github.com/baprx/zed-yaml-multi-schema/commit/b866da33f49b131fa5e4bd3cbf73f140a540356c))
+* **lsp:** adapt remote fetch to ureq 3 body API ([168a669](https://github.com/baprx/zed-yaml-multi-schema/commit/168a6697314981cebd6e2aefb71820f6d6ad4f3a))
+* **validator:** adapt to jsonschema 0.50 instance_path API change ([8361fa4](https://github.com/baprx/zed-yaml-multi-schema/commit/8361fa40cd656d662c868d734422e26919a43ec3))
+
 ## [0.6.0](https://github.com/baprx/zed-yaml-multi-schema/compare/v0.5.0...v0.6.0) (2026-08-28)
 
 
