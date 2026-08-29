@@ -47,7 +47,7 @@ fn example_values_all_annotations_resolve() {
 
     let root = manifest_dir;
     let fetcher = ExampleFetcher;
-    let mut server = YamlServer::new(&fetcher, Path::new(root));
+    let mut server = YamlServer::new(std::sync::Arc::new(fetcher), Path::new(root));
     server.on_change(&text);
 
     // The `example-values.yaml` values are all valid against their schemas, so

@@ -3,6 +3,7 @@
 
 use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
+use std::sync::Arc;
 
 /// How a schema reference should be resolved.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -15,7 +16,7 @@ pub enum ResolveKind {
 
 /// Abstract fetch capability, so the core logic is testable without the WASM
 /// host. The extension wires this to `zed::fs` / `zed::http_client`.
-pub trait SchemaFetcher {
+pub trait SchemaFetcher: Send + Sync {
     fn read_local(&self, path: &str) -> Result<String, String>;
     fn fetch_remote(&self, url: &str) -> Result<String, String>;
 }
@@ -59,19 +60,23 @@ fn normalize(path: &Path) -> PathBuf {
 
 /// Resolves and caches schemas keyed by reference string.
 pub struct SchemaResolver<'a> {
-    fetcher: &'a dyn SchemaFetcher,
+    fetcher: Arc<dyn SchemaFetcher>,
     /// Worktree root used to resolve relative local paths.
     worktree_root: &'a Path,
     cache: HashMap<String, ResolveOutcome>,
 }
 
 impl<'a> SchemaResolver<'a> {
-    pub fn new(fetcher: &'a dyn SchemaFetcher, worktree_root: &'a Path) -> Self {
+    pub fn new(fetcher: Arc<dyn SchemaFetcher>, worktree_root: &'a Path) -> Self {
         Self {
             fetcher,
             worktree_root,
             cache: HashMap::new(),
         }
+    }
+
+    pub fn fetcher(&self) -> Arc<dyn SchemaFetcher> {
+        Arc::clone(&self.fetcher)
     }
 
     /// Resolves `reference`, using the cache when available.
@@ -164,7 +169,8 @@ mod tests {
             local,
             remote: HashMap::new(),
         };
-        let mut resolver = SchemaResolver::new(&fetcher, Path::new("/root"));
+        let mut resolver = SchemaResolver::new(Arc::new(fetcher), Path::new("/root"));
+
         match resolver.resolve("./schemas/test.schema.json") {
             ResolveOutcome::Resolved { schema } => {
                 assert_eq!(schema["type"], "object");
@@ -184,7 +190,7 @@ mod tests {
             local: HashMap::new(),
             remote,
         };
-        let mut resolver = SchemaResolver::new(&fetcher, Path::new("/root"));
+        let mut resolver = SchemaResolver::new(Arc::new(fetcher), Path::new("/root"));
         assert!(matches!(
             resolver.resolve("https://example.com/v.schema.json"),
             ResolveOutcome::Resolved { .. }
@@ -197,7 +203,7 @@ mod tests {
             local: HashMap::new(),
             remote: HashMap::new(),
         };
-        let mut resolver = SchemaResolver::new(&fetcher, Path::new("/root"));
+        let mut resolver = SchemaResolver::new(Arc::new(fetcher), Path::new("/root"));
         match resolver.resolve("./missing.schema.json") {
             ResolveOutcome::Resolved { .. } => panic!("expected failure"),
             ResolveOutcome::Failed { reason } => assert!(reason.contains("missing.schema.json")),

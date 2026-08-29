@@ -7,6 +7,7 @@ use std::path::Path;
 use crate::completion;
 use crate::document::Document;
 use crate::resolver::{ResolveOutcome, SchemaFetcher, SchemaResolver};
+use std::sync::Arc;
 
 /// A diagnostic targeting a governed block.
 #[derive(Debug, Clone)]
@@ -45,7 +46,7 @@ pub struct YamlServer<'a> {
 }
 
 impl<'a> YamlServer<'a> {
-    pub fn new(fetcher: &'a dyn SchemaFetcher, worktree_root: &'a Path) -> Self {
+    pub fn new(fetcher: Arc<dyn SchemaFetcher>, worktree_root: &'a Path) -> Self {
         Self {
             resolver: SchemaResolver::new(fetcher, worktree_root),
             document: Document::default(),
@@ -77,7 +78,8 @@ impl<'a> YamlServer<'a> {
             };
             match self.resolver.resolve(reference) {
                 ResolveOutcome::Resolved { schema } => {
-                    match crate::validator::validate(&schema, &block.value) {
+                    match crate::validator::validate(&schema, &block.value, self.resolver.fetcher())
+                    {
                         Ok(findings) => {
                             for finding in findings {
                                 // Point the diagnostic at the specific offending
@@ -250,7 +252,7 @@ mod tests {
     #[test]
     fn diagnostics_scoped_to_annotated_block() {
         let fetcher = fetcher_with_schema();
-        let mut server = YamlServer::new(&fetcher, Path::new("/root"));
+        let mut server = YamlServer::new(Arc::new(fetcher), Path::new("/root"));
         server.on_change(
             "# $schema=./schemas/test.schema.json\ntest:\n  enabled: not-a-bool\n\ntraefik:\n  image:\n    tag: 1\n",
         );
@@ -263,7 +265,7 @@ mod tests {
     #[test]
     fn no_diagnostics_for_unannotated_block() {
         let fetcher = fetcher_with_schema();
-        let mut server = YamlServer::new(&fetcher, Path::new("/root"));
+        let mut server = YamlServer::new(Arc::new(fetcher), Path::new("/root"));
         server.on_change("kubernetes:\n  kind: ConfigMap\n");
         assert!(server.diagnostics().is_empty());
     }
@@ -271,7 +273,7 @@ mod tests {
     #[test]
     fn multiple_blocks_isolated() {
         let fetcher = fetcher_with_schema();
-        let mut server = YamlServer::new(&fetcher, Path::new("/root"));
+        let mut server = YamlServer::new(Arc::new(fetcher), Path::new("/root"));
         // Only `test` is annotated; `traefik` is unannotated.
         server.on_change(
             "# $schema=./schemas/test.schema.json\ntest:\n  enabled: bad\n\ntraefik:\n  anything: at all\n",
@@ -286,7 +288,7 @@ mod tests {
         let fetcher = FakeFetcher {
             local: HashMap::new(),
         };
-        let mut server = YamlServer::new(&fetcher, Path::new("/root"));
+        let mut server = YamlServer::new(Arc::new(fetcher), Path::new("/root"));
         server.on_change("# $schema=./missing.json\nfoo:\n  bar: 1\n");
         let diags = server.diagnostics();
         assert_eq!(diags.len(), 1);
@@ -297,7 +299,7 @@ mod tests {
     #[test]
     fn key_completion_carries_colon() {
         let fetcher = fetcher_with_schema();
-        let mut server = YamlServer::new(&fetcher, Path::new("/root"));
+        let mut server = YamlServer::new(Arc::new(fetcher), Path::new("/root"));
         let text = "# $schema=./schemas/test.schema.json\ntest:\n  \n  extra: x\n";
         server.on_change(text);
         let items = server.complete_at(text, 2, 2);
@@ -311,7 +313,7 @@ mod tests {
     #[test]
     fn completion_only_in_governed_block() {
         let fetcher = fetcher_with_schema();
-        let mut server = YamlServer::new(&fetcher, Path::new("/root"));
+        let mut server = YamlServer::new(Arc::new(fetcher), Path::new("/root"));
         let text = "# $schema=./schemas/test.schema.json\ntest:\n  enabled: \n\nother:\n  x: 1\n";
         server.on_change(text);
         // Cursor after `enabled:` (value position) inside `test` yields completions.
@@ -331,7 +333,7 @@ mod tests {
                 .to_string(),
         );
         let fetcher = FakeFetcher { local };
-        let mut server = YamlServer::new(&fetcher, Path::new("/root"));
+        let mut server = YamlServer::new(Arc::new(fetcher), Path::new("/root"));
         // `enabled` is already present in the `test` map, so it must not be
         // suggested; `version` is absent and still offered. The trailing `extra`
         // key keeps the cursor line inside the block (blank lines are trimmed).
@@ -352,7 +354,7 @@ mod tests {
                 .to_string(),
         );
         let fetcher = FakeFetcher { local };
-        let mut server = YamlServer::new(&fetcher, Path::new("/root"));
+        let mut server = YamlServer::new(Arc::new(fetcher), Path::new("/root"));
         // Cursor at indent 0 (column 0) inside the `test` block is invalid.
         let text =
             "# $schema=./schemas/test.schema.json\ntest:\n  enabled: true\n  version: 1\n\n  product: r\n";
@@ -364,7 +366,7 @@ mod tests {
     #[test]
     fn completion_value_position_suggests_boolean() {
         let fetcher = fetcher_with_schema();
-        let mut server = YamlServer::new(&fetcher, Path::new("/root"));
+        let mut server = YamlServer::new(Arc::new(fetcher), Path::new("/root"));
         let text = "# $schema=./schemas/test.schema.json\ntest:\n  enabled: \n";
         server.on_change(text);
         // Cursor after `enabled:` (value position) suggests booleans.
@@ -376,7 +378,7 @@ mod tests {
     #[test]
     fn completion_suggests_while_typing_partial_key() {
         let fetcher = fetcher_with_full_schema();
-        let mut server = YamlServer::new(&fetcher, Path::new("/root"));
+        let mut server = YamlServer::new(Arc::new(fetcher), Path::new("/root"));
         // `im` is typed without its colon, so the document is temporarily
         // invalid YAML; completions must still be offered from the raw lines.
         let text = "# $schema=./schemas/test.schema.json\ntest:\n  enabled: true\n  elements:\n    - 1\n    - A\n  im\n  product: r\n  version: 1\n";
@@ -389,7 +391,7 @@ mod tests {
     #[test]
     fn completion_on_empty_line_with_siblings_below() {
         let fetcher = fetcher_with_full_schema();
-        let mut server = YamlServer::new(&fetcher, Path::new("/root"));
+        let mut server = YamlServer::new(Arc::new(fetcher), Path::new("/root"));
         let text = "# $schema=./schemas/test.schema.json\ntest:\n  enabled: true\n  elements:\n    - 1\n    - A\n  \n  product: r\n  version: 1\n";
         server.on_change(text);
         let items = server.complete_at(text, 6, 2);
@@ -400,7 +402,7 @@ mod tests {
     #[test]
     fn diagnostics_point_at_offending_key_line() {
         let fetcher = fetcher_with_schema();
-        let mut server = YamlServer::new(&fetcher, Path::new("/root"));
+        let mut server = YamlServer::new(Arc::new(fetcher), Path::new("/root"));
         // `enabled` is on line 2; the diagnostic must target that line, not the
         // whole block.
         server.on_change(

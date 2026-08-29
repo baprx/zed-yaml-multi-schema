@@ -9,6 +9,7 @@ use std::io::{self, BufRead, Write};
 use std::path::Path;
 
 use serde_json::{json, Value};
+use std::sync::Arc;
 use zed_yaml_multi_schema::resolver::{ResolveKind, SchemaFetcher};
 use zed_yaml_multi_schema::server::YamlServer;
 
@@ -75,8 +76,8 @@ fn main() -> io::Result<()> {
     let mut out = stdout.lock();
 
     let root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-    let fetcher = FsFetcher;
-    let mut server = YamlServer::new(&fetcher, &root);
+    let fetcher: Arc<dyn SchemaFetcher> = Arc::new(FsFetcher);
+    let mut server = YamlServer::new(fetcher, &root);
     let mut documents: HashMap<String, String> = HashMap::new();
 
     eprintln!(

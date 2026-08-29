@@ -4,7 +4,9 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use std::sync::Arc;
 use zed_yaml_multi_schema::resolver::{ResolveKind, SchemaFetcher};
+use zed_yaml_multi_schema::server::YamlServer;
 
 /// Fake fetcher serving local paths from an in-memory map and remote URLs from
 /// another in-memory map, so tests never touch the network.
@@ -29,8 +31,8 @@ impl FakeFetcher {
         self.remote.insert(url.to_string(), content.to_string());
     }
 
-    pub fn server<'a>(&'a self, root: &'a Path) -> zed_yaml_multi_schema::server::YamlServer<'a> {
-        zed_yaml_multi_schema::server::YamlServer::new(self, root)
+    pub fn server(self, root: &Path) -> YamlServer<'_> {
+        YamlServer::new(Arc::new(self), root)
     }
 }
 
