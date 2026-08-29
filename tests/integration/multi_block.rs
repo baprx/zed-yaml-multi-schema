@@ -1,4 +1,4 @@
-//! US2 tests: multiple annotated blocks in one file (umbrella mode).
+//! US2 tests: multiple annotated blocks in one file.
 
 mod common;
 

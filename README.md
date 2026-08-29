@@ -3,8 +3,8 @@
 A [Zed](https://zed.dev) extension that applies **multiple JSON Schemas within a
 single YAML file**, each keyed by a `# $schema=<ref>` comment directly above a
 block. This fixes the gap where only one schema per file was possible, which is
-incompatible with deploying Helm charts in umbrella mode (where the top-level key
-is not the file root, and several charts share one `values.yaml`).
+incompatible with deploying Helm charts in umbrella mode for example (where the
+top-level key is not the file root, and several charts share one `values.yaml`).
 
 ## Contents
 
