@@ -191,8 +191,8 @@ fn initialize_result() -> Value {
         .map(|c| char::from(c).to_string())
         .collect();
     // Declaring letters as trigger characters makes Zed open the completion menu
-    // as soon as a key name is typed on a fresh line, not only after ':'/'-'.
-    trigger_chars.extend([":".to_string(), "-".to_string()]);
+    // as soon as a key name is typed on a fresh line, not only after '_'/'<space>'.
+    trigger_chars.extend(["_".to_string(), " ".to_string()]);
     json!({
         "capabilities": {
             "textDocumentSync": 1,
