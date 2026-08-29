@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.6.2](https://github.com/baprx/zed-yaml-multi-schema/compare/v0.6.1...v0.6.2) (2026-08-29)
+
+
+### Bug Fixes
+
+* replace deprecated crate serde_yaml with yaml_serde ([80730a4](https://github.com/baprx/zed-yaml-multi-schema/commit/80730a438193b4aa9cf597fb125f640f1d1d04ea))
+* resolve nested external $refs in schemas via custom retriever ([68e61a5](https://github.com/baprx/zed-yaml-multi-schema/commit/68e61a5ed0ac0e670021c9016421e18c2f367af7))
+
+
+### Performance Improvements
+
+* cache compiled Validator per schema reference ([ecd0457](https://github.com/baprx/zed-yaml-multi-schema/commit/ecd045797eee79fcd82835ad1d0d2cae8f426ce1))
+
 ## [0.6.1](https://github.com/baprx/zed-yaml-multi-schema/compare/v0.6.0...v0.6.1) (2026-08-28)
 
 
