@@ -57,6 +57,7 @@ impl<'a> YamlServer<'a> {
     /// Handles a document open/change: reparses, resolves schemas, validates
     /// governed blocks, and recomputes scoped diagnostics.
     pub fn on_change(&mut self, text: &str) {
+        let t0 = std::time::Instant::now();
         let doc = match Document::parse(text) {
             Ok(doc) => doc,
             Err(_) => {
@@ -68,18 +69,31 @@ impl<'a> YamlServer<'a> {
                 return;
             }
         };
+        let t_parse = t0.elapsed();
 
         let mut diagnostics = Vec::new();
         let lines: Vec<&str> = text.lines().collect();
+        let mut t_resolve = std::time::Duration::ZERO;
+        let mut t_validate = std::time::Duration::ZERO;
+
         for block in &doc.blocks {
             let Some(reference) = block.schema_ref.as_deref() else {
                 // Unannotated block: no governing schema, no diagnostics.
                 continue;
             };
-            match self.resolver.resolve(reference) {
+
+            let tr = std::time::Instant::now();
+            let outcome = self.resolver.resolve(reference);
+            t_resolve += tr.elapsed();
+
+            match outcome {
                 ResolveOutcome::Resolved { schema } => {
-                    match crate::validator::validate(&schema, &block.value, self.resolver.fetcher())
-                    {
+                    let tv = std::time::Instant::now();
+                    let result =
+                        crate::validator::validate(&schema, &block.value, self.resolver.fetcher());
+                    t_validate += tv.elapsed();
+
+                    match result {
                         Ok(findings) => {
                             for finding in findings {
                                 // Point the diagnostic at the specific offending
@@ -122,6 +136,11 @@ impl<'a> YamlServer<'a> {
                 }
             }
         }
+
+        eprintln!(
+            "yaml-multi-schema-lsp: on_change parse={:?} resolve={:?} validate={:?}",
+            t_parse, t_resolve, t_validate
+        );
 
         self.document = doc;
         self.diagnostics = diagnostics;

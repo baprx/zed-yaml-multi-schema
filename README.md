@@ -98,10 +98,11 @@ kubernetes:
 ## Development
 
 ```bash
-cargo build          # build the extension + LSP server
-cargo test           # unit + integration tests (test-first)
-cargo clippy --all-targets -- -D warnings
-cargo fmt -- --check
+cargo build                               # build the extension + LSP server
+cargo test                                # unit + integration tests
+cargo clippy --all-targets -- -D warnings # lint the project
+cargo fmt -- --check                      # check for formatting issues
+cargo bench                               # run benchmarks definedin ./benches/*.rs
 ```
 
 ## License

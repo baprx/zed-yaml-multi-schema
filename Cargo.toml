@@ -29,7 +29,12 @@ ureq = "3"
 
 
 [dev-dependencies]
+criterion = "0.7"
 tempfile = "3"
+
+[[bench]]
+name = "validate"
+harness = false
 
 [[test]]
 name = "annotation_validation"

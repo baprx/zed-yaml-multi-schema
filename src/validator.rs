@@ -37,11 +37,16 @@ impl Retrieve for FetcherRetriever {
         &self,
         uri: &Uri<String>,
     ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        let t0 = std::time::Instant::now();
         let text = self
             .fetcher
             .fetch_remote(uri.as_str())
             .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?;
-
+        eprintln!(
+            "yaml-multi-schema-lsp: retrieve {} took {:?}",
+            uri.as_str(),
+            t0.elapsed()
+        );
         serde_json::from_str(&text)
             .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })
     }
@@ -76,7 +81,7 @@ pub fn validate(
     Ok(findings)
 }
 
-/// Converts a serde_yaml value to serde_json for validation.
+/// Converts a yaml_serde value to serde_json for validation.
 fn to_json(value: &yaml_serde::Value) -> serde_json::Value {
     serde_json::to_value(value).unwrap_or(serde_json::Value::Null)
 }
