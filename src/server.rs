@@ -89,8 +89,10 @@ impl<'a> YamlServer<'a> {
             match outcome {
                 ResolveOutcome::Resolved { schema } => {
                     let tv = std::time::Instant::now();
-                    let result =
-                        crate::validator::validate(&schema, &block.value, self.resolver.fetcher());
+                    let result = self
+                        .resolver
+                        .validator_for(reference, &schema)
+                        .and_then(|validator| crate::validator::validate(&validator, &block.value));
                     t_validate += tv.elapsed();
 
                     match result {

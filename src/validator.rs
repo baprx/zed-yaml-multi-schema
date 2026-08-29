@@ -23,8 +23,8 @@ pub struct Finding {
 /// Without it, jsonschema has no way to fetch that ref itself, since
 /// `resolve-http`/`resolve-file` are compiled out (default-features = false
 /// in Cargo.toml).
-struct FetcherRetriever {
-    fetcher: Arc<dyn SchemaFetcher>,
+pub(crate) struct FetcherRetriever {
+    pub(crate) fetcher: Arc<dyn SchemaFetcher>,
 }
 
 /// Fetches and parses an external schema reference on jsonschema's behalf.
@@ -58,18 +58,7 @@ impl Retrieve for FetcherRetriever {
 /// crate default), so schemas declaring 2020-12 are honored while draft-07
 /// schemas (common in Helm charts) validate correctly. Unknown keywords degrade
 /// gracefully rather than fail.
-pub fn validate(
-    schema: &serde_json::Value,
-    value: &yaml_serde::Value,
-    fetcher: Arc<dyn SchemaFetcher>,
-) -> Result<Vec<Finding>, String> {
-    let validator = Validator::options()
-        // Registers our fetcher for any external $ref jsonschema hits
-        // while compiling `schema`.
-        .with_retriever(FetcherRetriever { fetcher })
-        .build(schema)
-        .map_err(|e| format!("invalid schema: {e}"))?;
-
+pub fn validate(validator: &Validator, value: &yaml_serde::Value) -> Result<Vec<Finding>, String> {
     let instance = to_json(value);
     let mut findings = Vec::new();
     for error in validator.iter_errors(&instance) {
@@ -91,23 +80,12 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    // Minimal fetcher for tests: these schemas are self-contained (no
-    // external $refs), so fetch_remote/read_local are never actually called.
-    struct NoopFetcher;
-    impl crate::resolver::SchemaFetcher for NoopFetcher {
-        fn read_local(&self, _path: &str) -> Result<String, String> {
-            Err("not used in this test".into())
-        }
-        fn fetch_remote(&self, _url: &str) -> Result<String, String> {
-            Err("not used in this test".into())
-        }
-    }
-
     #[test]
     fn reports_violation_for_invalid_value() {
         let schema = json!({"type":"object","properties":{"enabled":{"type":"boolean"}},"required":["enabled"]});
+        let validator = Validator::options().build(&schema).unwrap();
         let value: yaml_serde::Value = yaml_serde::from_str("enabled: not-a-bool\n").unwrap();
-        let findings = validate(&schema, &value, std::sync::Arc::new(NoopFetcher)).unwrap();
+        let findings = validate(&validator, &value).unwrap();
         assert!(!findings.is_empty());
         assert!(findings.iter().any(|f| f.instance_path.contains("enabled")));
     }
@@ -115,8 +93,9 @@ mod tests {
     #[test]
     fn passes_valid_value() {
         let schema = json!({"type":"object","properties":{"enabled":{"type":"boolean"}},"required":["enabled"]});
+        let validator = Validator::options().build(&schema).unwrap();
         let value: yaml_serde::Value = yaml_serde::from_str("enabled: true\n").unwrap();
-        let findings = validate(&schema, &value, std::sync::Arc::new(NoopFetcher)).unwrap();
+        let findings = validate(&validator, &value).unwrap();
         assert!(findings.is_empty());
     }
 
@@ -124,8 +103,9 @@ mod tests {
     fn ignores_unknown_keywords() {
         let schema =
             json!({"type":"object","properties":{"a":{"type":"integer"}},"x-custom-unknown":42});
+        let validator = Validator::options().build(&schema).unwrap();
         let value: yaml_serde::Value = yaml_serde::from_str("a: 1\n").unwrap();
-        let findings = validate(&schema, &value, std::sync::Arc::new(NoopFetcher)).unwrap();
+        let findings = validate(&validator, &value).unwrap();
         assert!(findings.is_empty());
     }
 }

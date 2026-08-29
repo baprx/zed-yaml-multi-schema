@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use std::collections::HashMap;
 use std::sync::Arc;
-use zed_yaml_multi_schema::resolver::SchemaFetcher;
+use zed_yaml_multi_schema::resolver::{SchemaFetcher, SchemaResolver};
 
 fn fixtures() -> HashMap<&'static str, &'static str> {
     let mut m = HashMap::new();
@@ -71,9 +71,6 @@ impl SchemaFetcher for BenchFetcher {
     }
 
     fn fetch_remote(&self, url: &str) -> Result<String, String> {
-        // Match by trailing filename rather than the full URL, so this
-        // doesn't care whether jsonschema resolves relative $refs against
-        // raw.githubusercontent.com/.../schemas/x.json or some other base.
         let name = url.rsplit('/').next().unwrap_or(url);
         self.files
             .get(name)
@@ -90,17 +87,52 @@ fn bench_validate(c: &mut Criterion) {
 
     c.bench_function("validate_bjws_schema", |b| {
         b.iter(|| {
-            zed_yaml_multi_schema::validator::validate(
-                &schema,
-                &value,
+            // Cold every iteration on purpose: one full build+validate cycle.
+            let mut resolver = SchemaResolver::new(
                 Arc::new(BenchFetcher {
                     files: files.clone(),
                 }),
-            )
-            .unwrap()
+                std::path::Path::new("/root"),
+            );
+            let validator = resolver.validator_for("bench-ref", &schema).unwrap();
+            zed_yaml_multi_schema::validator::validate(&validator, &value).unwrap()
         })
     });
 }
 
-criterion_group!(benches, bench_validate);
+fn bench_typing_session(c: &mut Criterion) {
+    let files = fixtures();
+    let schema: serde_json::Value = serde_json::from_str(files["values.schema.json"]).unwrap();
+
+    // Stand-in for ~20 keystrokes worth of on_change calls against a block
+    // whose # $schema= reference doesn't change — only the value does.
+    let values: Vec<yaml_serde::Value> = (1..=20)
+        .map(|replicas| {
+            yaml_serde::from_str(&format!(
+                "controllers:\n  main:\n    enabled: true\n    replicas: {replicas}\n"
+            ))
+            .unwrap()
+        })
+        .collect();
+
+    c.bench_function("validate_20_keystrokes_same_schema", |b| {
+        b.iter(|| {
+            // Resolver constructed fresh per iteration: first validator_for
+            // call pays the build cost, the other 19 hit the cache — this
+            // mirrors a real typing session starting from a file already open.
+            let mut resolver = SchemaResolver::new(
+                Arc::new(BenchFetcher {
+                    files: files.clone(),
+                }),
+                std::path::Path::new("/root"),
+            );
+            for value in &values {
+                let validator = resolver.validator_for("bench-ref", &schema).unwrap();
+                zed_yaml_multi_schema::validator::validate(&validator, value).unwrap();
+            }
+        })
+    });
+}
+
+criterion_group!(benches, bench_validate, bench_typing_session);
 criterion_main!(benches);

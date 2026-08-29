@@ -31,8 +31,6 @@ app-template:
             tag: v1
             repository: example
 
-
-
 kubernetes:
   apiVersion: v1
   kind: ConfigMap

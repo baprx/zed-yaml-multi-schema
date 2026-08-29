@@ -1,6 +1,7 @@
 //! Schema resolution: load schemas from local relative paths and remote HTTPS
 //! URLs, with caching and graceful failure.
 
+use jsonschema::Validator;
 use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
@@ -64,6 +65,7 @@ pub struct SchemaResolver<'a> {
     /// Worktree root used to resolve relative local paths.
     worktree_root: &'a Path,
     cache: HashMap<String, ResolveOutcome>,
+    validator_cache: HashMap<String, Arc<Validator>>,
 }
 
 impl<'a> SchemaResolver<'a> {
@@ -72,6 +74,7 @@ impl<'a> SchemaResolver<'a> {
             fetcher,
             worktree_root,
             cache: HashMap::new(),
+            validator_cache: HashMap::new(),
         }
     }
 
@@ -94,6 +97,31 @@ impl<'a> SchemaResolver<'a> {
             self.cache.insert(reference.to_string(), outcome.clone());
         }
         outcome
+    }
+
+    /// Returns a compiled Validator for `reference`, building (and caching)
+    /// it only the first time this reference is seen. `schema` is the
+    /// already-resolved root schema document (from `self.resolve`).
+    pub fn validator_for(
+        &mut self,
+        reference: &str,
+        schema: &serde_json::Value,
+    ) -> Result<Arc<Validator>, String> {
+        if let Some(v) = self.validator_cache.get(reference) {
+            return Ok(Arc::clone(v));
+        }
+
+        let validator = Validator::options()
+            .with_retriever(crate::validator::FetcherRetriever {
+                fetcher: Arc::clone(&self.fetcher),
+            })
+            .build(schema)
+            .map_err(|e| format!("invalid schema: {e}"))?;
+
+        let validator = Arc::new(validator);
+        self.validator_cache
+            .insert(reference.to_string(), Arc::clone(&validator));
+        Ok(validator)
     }
 
     fn resolve_uncached(&self, reference: &str) -> ResolveOutcome {
