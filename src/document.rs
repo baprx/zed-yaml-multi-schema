@@ -1,6 +1,6 @@
 //! Document model: parsing YAML and mapping `# $schema=` annotations to blocks.
 
-use serde_yaml::Value;
+use yaml_serde::Value;
 
 /// The reference extracted from a `# $schema=<ref>` annotation.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -86,7 +86,7 @@ impl Document {
 
         // Root value for reading block values.
         let root: Value =
-            serde_yaml::from_str(text).map_err(|e| format!("YAML parse error: {e}"))?;
+            yaml_serde::from_str(text).map_err(|e| format!("YAML parse error: {e}"))?;
 
         let mut blocks = Vec::new();
 

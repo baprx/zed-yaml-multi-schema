@@ -55,7 +55,7 @@ impl Retrieve for FetcherRetriever {
 /// gracefully rather than fail.
 pub fn validate(
     schema: &serde_json::Value,
-    value: &serde_yaml::Value,
+    value: &yaml_serde::Value,
     fetcher: Arc<dyn SchemaFetcher>,
 ) -> Result<Vec<Finding>, String> {
     let validator = Validator::options()
@@ -77,7 +77,7 @@ pub fn validate(
 }
 
 /// Converts a serde_yaml value to serde_json for validation.
-fn to_json(value: &serde_yaml::Value) -> serde_json::Value {
+fn to_json(value: &yaml_serde::Value) -> serde_json::Value {
     serde_json::to_value(value).unwrap_or(serde_json::Value::Null)
 }
 
@@ -101,7 +101,7 @@ mod tests {
     #[test]
     fn reports_violation_for_invalid_value() {
         let schema = json!({"type":"object","properties":{"enabled":{"type":"boolean"}},"required":["enabled"]});
-        let value: serde_yaml::Value = serde_yaml::from_str("enabled: not-a-bool\n").unwrap();
+        let value: yaml_serde::Value = yaml_serde::from_str("enabled: not-a-bool\n").unwrap();
         let findings = validate(&schema, &value, std::sync::Arc::new(NoopFetcher)).unwrap();
         assert!(!findings.is_empty());
         assert!(findings.iter().any(|f| f.instance_path.contains("enabled")));
@@ -110,7 +110,7 @@ mod tests {
     #[test]
     fn passes_valid_value() {
         let schema = json!({"type":"object","properties":{"enabled":{"type":"boolean"}},"required":["enabled"]});
-        let value: serde_yaml::Value = serde_yaml::from_str("enabled: true\n").unwrap();
+        let value: yaml_serde::Value = yaml_serde::from_str("enabled: true\n").unwrap();
         let findings = validate(&schema, &value, std::sync::Arc::new(NoopFetcher)).unwrap();
         assert!(findings.is_empty());
     }
@@ -119,7 +119,7 @@ mod tests {
     fn ignores_unknown_keywords() {
         let schema =
             json!({"type":"object","properties":{"a":{"type":"integer"}},"x-custom-unknown":42});
-        let value: serde_yaml::Value = serde_yaml::from_str("a: 1\n").unwrap();
+        let value: yaml_serde::Value = yaml_serde::from_str("a: 1\n").unwrap();
         let findings = validate(&schema, &value, std::sync::Arc::new(NoopFetcher)).unwrap();
         assert!(findings.is_empty());
     }

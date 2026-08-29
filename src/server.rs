@@ -185,8 +185,8 @@ impl<'a> YamlServer<'a> {
 
 /// Collects the property names already present in the mapping at `path`
 /// (relative to a block's value), so key completions can avoid duplicates.
-fn existing_keys(value: &serde_yaml::Value, path: &[String]) -> Vec<String> {
-    use serde_yaml::Value;
+fn existing_keys(value: &yaml_serde::Value, path: &[String]) -> Vec<String> {
+    use yaml_serde::Value;
     let mut node = value;
     for key in path {
         match node {
