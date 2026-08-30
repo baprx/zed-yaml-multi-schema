@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.3](https://github.com/baprx/zed-yaml-multi-schema/compare/v0.6.2...v0.6.3) (2026-08-30)
+
+
+### Bug Fixes
+
+* make the comment marker more precise to avoid matching $schema anywhere in a comment ([b84845b](https://github.com/baprx/zed-yaml-multi-schema/commit/b84845b5593f8e58e7b26f61fa0fd15d2875934d))
+
 ## [0.6.2](https://github.com/baprx/zed-yaml-multi-schema/compare/v0.6.1...v0.6.2) (2026-08-29)
 
 
