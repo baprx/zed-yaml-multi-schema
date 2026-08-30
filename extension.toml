@@ -2,7 +2,7 @@ id = "yaml-multi-schema"
 name = "YAML Multi-Schema"
 version = "0.6.2"
 schema_version = 1
-authors = ["YAML Multi-Schema contributors"]
+authors = ["Baptiste ROUX"]
 description = "Per-block JSON Schema validation and completion for YAML files."
 repository = "https://github.com/baprx/zed-yaml-multi-schema"
 
