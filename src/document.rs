@@ -33,7 +33,7 @@ pub struct Document {
 }
 
 /// The `# $schema=` marker used to annotate a block.
-const SCHEMA_MARKER: &str = "$schema=";
+const SCHEMA_MARKER: &str = "# $schema=";
 
 /// Returns true if `line` is a top-level key line (column 0, not a doc marker,
 /// comment, empty, or list item).
