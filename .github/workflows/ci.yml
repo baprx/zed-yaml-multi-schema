@@ -32,6 +32,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # stable
         with:
           components: rustfmt, clippy
+          toolchain: stable
 
       - name: Format
         run: cargo fmt -- --check
