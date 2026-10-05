@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.4](https://github.com/baprx/zed-yaml-multi-schema/compare/v0.6.3...v0.6.4) (2026-10-05)
+
+
+### Bug Fixes
+
+* **deps:** update rust crate jsonschema to 0.52 ([#5](https://github.com/baprx/zed-yaml-multi-schema/issues/5)) ([6ba4eca](https://github.com/baprx/zed-yaml-multi-schema/commit/6ba4eca661848d807ba63357d224d71226c50671))
+* **deps:** update rust crate jsonschema to 0.58 ([#8](https://github.com/baprx/zed-yaml-multi-schema/issues/8)) ([2d83987](https://github.com/baprx/zed-yaml-multi-schema/commit/2d83987d31ebe11155d78e8a644720c1e4842d5d))
+
 ## [0.6.3](https://github.com/baprx/zed-yaml-multi-schema/compare/v0.6.2...v0.6.3) (2026-08-30)
 
 
