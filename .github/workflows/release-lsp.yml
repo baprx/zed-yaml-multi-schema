@@ -29,6 +29,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # stable
         with:
           targets: ${{ matrix.target }}
+          toolchain: stable
 
       - name: Build language server
         run: cargo build --release --features lsp-bin --target ${{ matrix.target }}
